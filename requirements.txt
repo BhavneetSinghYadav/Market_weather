@@ -1,0 +1,11 @@
+numpy
+pandas
+scipy
+numba
+scikit-learn
+matplotlib
+pyarrow
+python-dateutil
+pytz
+requests
+polygon-api-client

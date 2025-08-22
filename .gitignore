@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+data/
+*.parquet
+*.csv
+*.jsonl
+.DS_Store
+.vscode/

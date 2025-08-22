@@ -1,0 +1,9 @@
+{
+  "granularity": "1min",
+  "symbol": "C:XAUUSD",
+  "pe": { "window": 60, "m": 3, "tau": 1 },
+  "ftle": { "window": 200, "m": 3, "tau": 1, "horizon": 10, "theiler": 2 },
+  "smoothing": { "ema_span": 3 },
+  "score": { "w1": 0.6, "w2": 0.4, "tau_y": 0.45, "tau_g": 0.65, "k_up": 2, "k_down": 1, "min_flip_spacing": 3 },
+  "normalization": { "method": "minmax" }
+}
