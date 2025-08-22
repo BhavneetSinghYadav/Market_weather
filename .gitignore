@@ -11,3 +11,6 @@ data/
 *.jsonl
 .DS_Store
 .vscode/
+
+# Local secrets
+.env
