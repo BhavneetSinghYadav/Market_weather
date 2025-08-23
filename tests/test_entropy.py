@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from mw.features.entropy import (  # noqa: E402
     permutation_entropy,
     rolling_permutation_entropy,
+    sample_entropy,
 )
 
 
@@ -40,3 +41,17 @@ def test_rolling_permutation_entropy_alignment():
         )
 
     pd.testing.assert_series_equal(result, expected)
+
+
+def test_sample_entropy_constant_zero():
+    series = pd.Series([5] * 50)
+    assert sample_entropy(series, m=2, r=0.2) == 0.0
+
+
+def test_sample_entropy_random_greater_than_deterministic():
+    rng = np.random.default_rng(0)
+    random_series = pd.Series(rng.normal(size=1000))
+    deterministic = pd.Series(np.sin(np.linspace(0, 10 * np.pi, 1000)))
+    h_rand = sample_entropy(random_series, m=2, r=0.2)
+    h_det = sample_entropy(deterministic, m=2, r=0.2)
+    assert h_rand > h_det

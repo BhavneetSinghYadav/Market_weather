@@ -86,5 +86,39 @@ def sample_entropy(series: pd.Series, m: int = 2, r: float = 0.2) -> float:
 
     Uses robust sigma for r*sigma.
     """
-    # TODO: implement (with Theiler exclusion)
-    raise NotImplementedError
+    x = series.dropna().to_numpy(dtype=float)
+    n = x.size
+    if n <= m + 1:
+        return float("nan")
+
+    # Robust sigma via median absolute deviation
+    med = np.median(x)
+    mad = np.median(np.abs(x - med))
+    sigma = mad * 1.4826
+    tol = r * sigma
+
+    # Build template vectors of length m and m+1
+    emb_m = np.column_stack([x[i : n - m + i + 1] for i in range(m)])
+    emb_m1 = np.column_stack([x[i : n - m + i] for i in range(m + 1)])
+
+    theiler = m  # Exclude temporally adjacent vectors
+
+    def _match_fraction(embed: np.ndarray) -> float:
+        matches = 0
+        total = 0
+        n_vec = embed.shape[0]
+        for i in range(n_vec - 1):
+            for j in range(i + theiler + 1, n_vec):
+                total += 1
+                if np.max(np.abs(embed[i] - embed[j])) <= tol:
+                    matches += 1
+        if total == 0:
+            return float("nan")
+        return matches / total
+
+    b = _match_fraction(emb_m)
+    a = _match_fraction(emb_m1)
+    if np.isnan(a) or np.isnan(b) or a == 0 or b == 0:
+        return float("nan")
+
+    return float(-np.log(a / b))
