@@ -6,7 +6,12 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from mw.live.logger import GapEvent, SessionLogger  # noqa: E402
+from mw.live.logger import (
+    DuplicateDrop,
+    GapEvent,
+    LateBar,
+    SessionLogger,
+)  # noqa: E402
 
 
 def test_session_logger_writes_csv_and_summary(tmp_path):
@@ -50,3 +55,26 @@ def test_session_logger_records_gaps(tmp_path):
     assert logger.gap_events[0] == event
     summary = json.loads(summary_path.read_text())
     assert summary["gap_count"] == 1
+
+
+def test_session_logger_health_summary(tmp_path):
+    csv_path = tmp_path / "log.csv"
+    summary_path = tmp_path / "summary.json"
+    logger = SessionLogger(csv_path, summary_path)
+
+    dup = DuplicateDrop(datetime(2024, 1, 1, tzinfo=timezone.utc), "EURUSD")
+    late = LateBar(datetime(2024, 1, 1, 0, 1, tzinfo=timezone.utc), "EURUSD")
+    logger.log_duplicate(dup)
+    logger.log_late_bar(late)
+    logger.log_seen_bars(5)
+    logger.record_api_latency(0.5)
+    logger.record_api_latency(1.2)
+    logger.close()
+
+    summary = json.loads(summary_path.read_text())
+    health = summary["health"]
+    assert health["seen_bars"] == 5
+    assert health["gap_count"] == 0
+    assert health["duplicate_count"] == 1
+    assert health["late_bar_count"] == 1
+    assert health["max_api_latency"] == 1.2

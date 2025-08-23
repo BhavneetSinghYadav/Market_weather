@@ -19,7 +19,12 @@ from typing import Any, Callable, Optional, Union
 import pandas as pd
 
 from mw.live.health import evaluate_freshness
-from mw.live.logger import GapEvent, SessionLogger
+from mw.live.logger import (
+    DuplicateDrop,
+    GapEvent,
+    LateBar,
+    SessionLogger,
+)
 from mw.utils.params import MinuteLoopParams, Params
 from mw.utils.persistence import write_parquet
 from mw.utils.time import floor_to_minute, now_utc
@@ -44,9 +49,18 @@ def _append_polled_bars(
             _LAST_TS_SEEN = missing
         return
 
-    new = new.sort_values("timestamp").drop_duplicates(subset=["timestamp"])
+    new = new.sort_values("timestamp")
+    if logger is not None:
+        dup_mask = new["timestamp"].duplicated(keep="last")
+        for ts in new.loc[dup_mask, "timestamp"]:
+            logger.log_duplicate(DuplicateDrop(ts.to_pydatetime(), symbol))
+    new = new.drop_duplicates(subset=["timestamp"], keep="last")
     if _LAST_TS_SEEN is not None:
-        new = new[new["timestamp"] > _LAST_TS_SEEN]
+        late_mask = new["timestamp"] <= _LAST_TS_SEEN
+        if logger is not None:
+            for ts in new.loc[late_mask, "timestamp"]:
+                logger.log_late_bar(LateBar(ts.to_pydatetime(), symbol))
+        new = new[~late_mask]
         if new.empty:
             missing = _LAST_TS_SEEN + timedelta(minutes=1)
             if logger is not None:
@@ -62,6 +76,8 @@ def _append_polled_bars(
             expected += timedelta(minutes=1)
 
     _LAST_TS_SEEN = new["timestamp"].max()
+    if logger is not None:
+        logger.log_seen_bars(len(new))
 
     if _BARS_PATH.exists():
         existing = pd.read_parquet(_BARS_PATH)
@@ -126,7 +142,11 @@ def run_minute_loop(
                 stale_fn(freshness)
 
     def poll_step() -> None:
+        start = time.perf_counter()
         data = poll_fn()
+        latency = time.perf_counter() - start
+        if session_logger is not None:
+            session_logger.record_api_latency(latency)
         if isinstance(data, pd.DataFrame):
             _append_polled_bars(data, session_logger, symbol)
 
