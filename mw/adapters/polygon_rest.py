@@ -1,8 +1,100 @@
-"""Polygon REST adapter (placeholder).
+"""Polygon REST adapter."""
 
-Functions to implement:
-- fetch_fx_agg_minute(symbol: str, start: str|int, end: str|int, limit: int=50000) -> pd.DataFrame
-- backfill_fx_agg_minute(symbol: str, start: str, end: str, chunk_days: int=3) -> Iterator[pd.DataFrame]
-All timestamps UTC; returns canonical columns (ts, open, high, low, close, volume).
-"""
-# TODO: implement
+from __future__ import annotations
+
+import os
+from datetime import timedelta
+from typing import Iterator
+
+import pandas as pd
+import requests
+
+BASE_URL = "https://api.polygon.io"
+
+
+def _get_api_key() -> str:
+    """Return the Polygon API key from the environment."""
+    api_key = os.getenv("POLYGON_API_KEY")
+    if not api_key:
+        raise RuntimeError("POLYGON_API_KEY not set")
+    return api_key
+
+
+def fetch_fx_agg_minute(
+    symbol: str, start: str | int, end: str | int, limit: int = 50_000
+) -> pd.DataFrame:
+    """Fetch minute aggregates for ``symbol`` between ``start`` and ``end``.
+
+    Parameters
+    ----------
+    symbol:
+        Currency pair such as ``"EURUSD"``.
+    start, end:
+        Either ``YYYY-MM-DD`` date strings or millisecond timestamps
+        understood by the Polygon aggregates endpoint.
+    limit:
+        Maximum number of rows to return from Polygon (default 50,000).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns ``timestamp``, ``open``, ``high``, ``low``,
+        ``close`` and ``volume``.  ``timestamp`` is timezone aware (UTC).
+    """
+
+    api_key = _get_api_key()
+    url = f"{BASE_URL}/v2/aggs/ticker/C:{symbol}/range/1/minute/{start}/{end}"
+    params = {
+        "adjusted": "true",
+        "sort": "asc",
+        "limit": limit,
+        "apiKey": api_key,
+    }
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    results = data.get("results", [])
+    if not results:
+        return pd.DataFrame(
+            columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
+    df = pd.DataFrame(results)
+    df = df.rename(
+        columns={
+            "t": "timestamp",
+            "o": "open",
+            "h": "high",
+            "l": "low",
+            "c": "close",
+            "v": "volume",
+        }
+    )
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    return df[["timestamp", "open", "high", "low", "close", "volume"]]
+
+
+def backfill_fx_agg_minute(
+    symbol: str, start: str, end: str, chunk_days: int = 3
+) -> Iterator[pd.DataFrame]:
+    """Yield minute aggregates for ``symbol`` over a date range.
+
+    The date range ``start`` → ``end`` (inclusive) is split into chunks of
+    ``chunk_days`` each.  Each yielded dataframe contains canonical columns as
+    described by :func:`fetch_fx_agg_minute`.
+    """
+
+    start_dt = pd.to_datetime(start).tz_localize("UTC")
+    end_dt = pd.to_datetime(end).tz_localize("UTC")
+    current = start_dt
+    delta = timedelta(days=chunk_days - 1)
+
+    while current <= end_dt:
+        chunk_end = min(current + delta, end_dt)
+        df = fetch_fx_agg_minute(
+            symbol,
+            current.strftime("%Y-%m-%d"),
+            chunk_end.strftime("%Y-%m-%d"),
+        )
+        if not df.empty:
+            yield df
+        current = chunk_end + timedelta(days=1)
