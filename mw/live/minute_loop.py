@@ -10,6 +10,7 @@ minute boundaries.  Offsets (in seconds) are supplied via ``params`` and
 default to a small stagger between steps.
 """
 
+import logging
 import time
 from datetime import timedelta
 from typing import Any, Callable, Dict
@@ -51,4 +52,7 @@ def run_minute_loop(
         target = minute_start + timedelta(seconds=offsets.get(name, 0))
         sleep_for = (target - now_utc()).total_seconds()
         time.sleep(max(0.0, sleep_for))
-        fn()
+        try:
+            fn()
+        except Exception:
+            logging.exception("Exception in %s step", name)
