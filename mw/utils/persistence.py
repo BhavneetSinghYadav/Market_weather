@@ -10,12 +10,13 @@ Exports:
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Sequence
 
 import pandas as pd
 
@@ -77,3 +78,24 @@ def write_json(obj: Dict[str, Any], path: str) -> None:
         except OSError:
             pass
         raise
+
+
+def append_csv(row: Dict[str, Any], path: str | Path, fieldnames: Sequence[str]) -> None:
+    """Append ``row`` to ``path`` ensuring durability.
+
+    The CSV file grows incrementally with each call. Data is flushed and
+    fsynced so that interruptions do not leave partially written rows.
+    ``fieldnames`` define the column order and header written when the file is
+    first created.
+    """
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    exists = target.exists()
+    with target.open("a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not exists:
+            writer.writeheader()
+        writer.writerow(row)
+        f.flush()
+        os.fsync(f.fileno())

@@ -13,9 +13,13 @@ default to a small stagger between steps.
 import logging
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+import pandas as pd
+
 from mw.live.health import evaluate_freshness
+from mw.utils.persistence import write_parquet
 from mw.utils.time import floor_to_minute, now_utc
 
 
@@ -79,6 +83,7 @@ def run_minute_loop(
     ]
 
     skip_when_stale = {"compute", "persist", "log", "plot"}
+    features: Any = None
 
     for name, fn in steps:
         offset_name = "compute" if name == "freshness" else name
@@ -88,10 +93,28 @@ def run_minute_loop(
         if stale and name in skip_when_stale:
             continue
         try:
-            fn()
+            if name == "compute":
+                features = fn()
+                _persist_features(features)
+            else:
+                fn()
         except Exception as exc:
             logging.exception("Exception in %s step", name)
             if error_fn is not None:
                 error_fn(name, exc)
             if name in critical_steps:
                 break
+
+
+def _persist_features(features: Any) -> None:
+    """Persist feature dataframes to the ``data/`` hierarchy."""
+
+    if features is None:
+        return
+    base = Path("data")
+    if isinstance(features, pd.DataFrame):
+        write_parquet(features, str(base / "features.parquet"))
+    elif isinstance(features, dict):
+        for name, df in features.items():
+            if isinstance(df, pd.DataFrame):
+                write_parquet(df, str(base / f"{name}.parquet"))

@@ -6,13 +6,13 @@ and write a JSON session summary on shutdown.
 
 from __future__ import annotations
 
-import csv
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+from mw.utils.persistence import append_csv, write_json
 from mw.utils.time import now_utc
 
 
@@ -34,22 +34,16 @@ class SessionLogger:
     ) -> None:
         """Append a record for ``timestamp`` to the CSV file."""
 
-        self.csv_path.parent.mkdir(parents=True, exist_ok=True)
-        exists = self.csv_path.exists()
-        with self.csv_path.open("a", newline="") as f:
-            writer = csv.DictWriter(
-                f, fieldnames=["timestamp", "score", "state", "diagnostics"]
-            )
-            if not exists:
-                writer.writeheader()
-            writer.writerow(
-                {
-                    "timestamp": timestamp.isoformat(),
-                    "score": score,
-                    "state": state,
-                    "diagnostics": json.dumps(diagnostics),
-                }
-            )
+        append_csv(
+            {
+                "timestamp": timestamp.isoformat(),
+                "score": score,
+                "state": state,
+                "diagnostics": json.dumps(diagnostics),
+            },
+            self.csv_path,
+            ["timestamp", "score", "state", "diagnostics"],
+        )
         self.rows += 1
 
     def close(self, **extra: Any) -> None:
@@ -61,6 +55,4 @@ class SessionLogger:
             "rows": self.rows,
         }
         summary.update(extra)
-        self.summary_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.summary_path.open("w") as f:
-            json.dump(summary, f)
+        write_json(summary, self.summary_path.as_posix())
