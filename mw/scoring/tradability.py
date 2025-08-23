@@ -1,13 +1,14 @@
-"""
-Tradability score & state machine (stubs).
+"""Tradability scoring and state classification utilities.
+
+Combines forecast error and latency into a tradability score and maps the
+score to ``"RED"``, ``"YELLOW"`` or ``"GREEN"`` states with hysteresis.
 
 Exports:
-- score_tradability(e_hat: pd.Series, l_hat: pd.Series,
-              weights: dict) -> pd.Series
-- state_machine(scores: pd.Series, prev_state: str,
-                thresholds: dict, hysteresis: dict,
-                timestamps: pd.Series=None) -> pd.Series
-States: "RED", "YELLOW", "GREEN".
+- score_tradability(e_hat: pd.Series, l_hat: pd.Series, weights: dict = None)
+  -> pd.Series
+- state_machine(scores: pd.Series, prev_state: str = None,
+                thresholds: dict = None, hysteresis: dict = None,
+                timestamps: pd.Series | None = None) -> pd.Series
 """
 
 from typing import Optional

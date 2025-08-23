@@ -1,8 +1,11 @@
 """Persistence helpers for common file formats.
 
-Currently only JSON writing is implemented. The helper ensures that data is
-written atomically so that partially written files are not left behind when a
-process is interrupted.
+Provides atomic write helpers for Parquet and JSON files to avoid partially
+written data when processes are interrupted.
+
+Exports:
+- write_parquet(df: pd.DataFrame, path: str) -> None
+- write_json(obj: Dict[str, Any], path: str) -> None
 """
 
 from __future__ import annotations

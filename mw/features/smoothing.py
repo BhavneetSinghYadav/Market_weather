@@ -1,8 +1,7 @@
-"""
-Smoothing / hysteresis helpers (stubs).
+"""Smoothing helpers for time series.
 
 Exports:
-- ema(series: pd.Series, span: int=3) -> pd.Series
+- ema(series: pd.Series, span: int = 3) -> pd.Series
 """
 import pandas as pd
 
