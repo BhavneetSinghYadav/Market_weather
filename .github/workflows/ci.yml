@@ -21,4 +21,4 @@ jobs:
         run: pre-commit run --all-files
       - name: Tests
         run: |
-          python -m pytest -q || true
+          python -m pytest --maxfail=1 -q
