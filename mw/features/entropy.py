@@ -1,15 +1,11 @@
-"""
-Entropy metrics (stubs).
+"""Entropy metrics for time series.
 
-Exports (to implement):
+Exports:
 - permutation_entropy(series: pd.Series, m=3, tau=1) -> float
 - rolling_permutation_entropy(
     series: pd.Series, window: int, m=3, tau=1
   ) -> pd.Series
 - sample_entropy(series: pd.Series, m=2, r=0.2) -> float
-Notes:
-- Use closes or returns; causal windows only.
-- Handle ties by tiny jitter or averaged ranks.
 """
 
 from collections import Counter

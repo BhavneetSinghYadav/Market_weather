@@ -1,5 +1,7 @@
-"""
-OHLC integrity checks (stub).
+"""Integrity checks for OHLC price data.
+
+Exports:
+- validate_ohlc(df: pd.DataFrame) -> pd.Series
 """
 import pandas as pd
 
