@@ -16,8 +16,17 @@ DEFAULT_HYST = {"k_up": 2, "k_down": 1, "min_flip_spacing": 3}
 
 def score_tradability(e_hat: pd.Series, l_hat: pd.Series, weights: dict = None) -> pd.Series:
     """𝒯 = w1*(1 - e_hat) + w2*(1 - l_hat), clipped to [0,1]."""
-    # TODO: implement (align indexes; clip)
-    raise NotImplementedError
+    if weights is None:
+        weights = DEFAULT_WEIGHTS
+    else:
+        # fall back to defaults if keys missing
+        weights = {"w1": weights.get("w1", DEFAULT_WEIGHTS["w1"]),
+                   "w2": weights.get("w2", DEFAULT_WEIGHTS["w2"])}
+
+    e_hat_aligned, l_hat_aligned = e_hat.align(l_hat, join="inner")
+
+    score = weights["w1"] * (1 - e_hat_aligned) + weights["w2"] * (1 - l_hat_aligned)
+    return score.clip(0, 1)
 
 def state_machine(scores: pd.Series, prev_state: Optional[str] = None,
                   thresholds: dict = None, hysteresis: dict = None,
