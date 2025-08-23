@@ -99,6 +99,7 @@ def fetch_fx_agg_minute(
         }
     )
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df.attrs["source_time_basis"] = "UTC"
     return df[["timestamp", "open", "high", "low", "close", "volume"]]
 
 

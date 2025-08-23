@@ -97,5 +97,5 @@ def fetch_quotes(
         df["venue"] = df[venue_col]
     else:
         df["venue"] = pd.NA
-
+    df.attrs["source_time_basis"] = "UTC"
     return df[["ts_utc", "bid", "ask", "mid", "venue"]]
