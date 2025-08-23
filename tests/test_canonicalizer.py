@@ -30,11 +30,11 @@ def make_sample_df():
 def test_canonicalize_end_to_end(tmp_path):
     raw = make_sample_df()
     out = tmp_path / "data.parquet"
+    raw.attrs["source_time_basis"] = "America/New_York"
     canonicalize(
         raw,
         out.as_posix(),
         source="unit_test",
-        tz_of_source="America/New_York",
     )
 
     result = pd.read_parquet(out)
@@ -75,9 +75,26 @@ def test_canonicalize_end_to_end(tmp_path):
     assert meta["contract_version"] == 1
     assert isinstance(meta["hash"], str) and len(meta["hash"]) == 64
     assert meta["source"] == "unit_test"
-    assert meta["tz_of_source"] == "America/New_York"
+    assert meta["source_time_basis"] == "America/New_York"
     assert isinstance(meta["loaded_at"], str)
     assert meta["clip_count"] == 0
+
+
+def test_respects_source_time_basis_attr(tmp_path):
+    df = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-01 14:30"],
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+        }
+    )
+    df.attrs["source_time_basis"] = "UTC"
+    out = tmp_path / "utc.parquet"
+    result = canonicalize(df, out.as_posix())
+
+    assert result.index[0] == pd.Timestamp("2024-01-01 14:30", tz="UTC")
 
 
 def test_canonicalize_invalid_ohlc(tmp_path):
@@ -169,7 +186,7 @@ def test_canonicalize_empty(tmp_path):
     assert meta["duplicates"] == 0
     assert meta["gaps"] == 0
     assert "source" in meta
-    assert "tz_of_source" in meta
+    assert "source_time_basis" in meta
     assert isinstance(meta["loaded_at"], str)
     assert meta["clip_count"] == 0
 

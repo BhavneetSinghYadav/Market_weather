@@ -36,6 +36,7 @@ def test_pipeline_integration(monkeypatch, tmp_path):
                 "volume": [0] * len(close),
             }
         )
+        df.attrs["source_time_basis"] = "UTC"
         return df
 
     monkeypatch.setattr(polygon_rest, "fetch_fx_agg_minute", fake_fetch)

@@ -67,7 +67,7 @@ The same pipeline later runs on a small server with Polygon WebSockets.
 
 **Persistence**
 - Parquet per day: `data/canonical/XAUUSD/1min/XAUUSD_1min_YYYY-MM-DD.parquet`  
-- Sidecar meta (`.meta.json`): source, tz_of_source, loaded_at, row/gap/dup/clip counts, sha256, `contract_version`.
+- Sidecar meta (`.meta.json`): source, source_time_basis, loaded_at, row/gap/dup/clip counts, sha256, `contract_version`.
 
 ---
 

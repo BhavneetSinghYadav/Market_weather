@@ -3,7 +3,7 @@
 This module normalises raw minute level market data so that downstream
 components can rely on a stable contract.  The process consists of:
 
-* converting timestamps from Eastern time to UTC;
+* converting timestamps to UTC based on a declared source timezone;
 * enforcing a strict one minute grid, keeping only the last observation
   when duplicates are present and inserting explicit gap rows when data is
   missing;
@@ -50,7 +50,7 @@ def canonicalize(
     contract_version: int = 1,
     *,
     source: Optional[str] = None,
-    tz_of_source: Optional[str] = None,
+    source_time_basis: Optional[str] = None,
 ) -> pd.DataFrame:
     """Canonicalise ``df`` and persist the result to ``parquet_path``.
 
@@ -68,7 +68,7 @@ def canonicalize(
         Integer identifying the schema version of the canonical contract.
     source:
         Identifier describing the origin of ``df``.
-    tz_of_source:
+    source_time_basis:
         Timezone string describing the timezone of the raw timestamps.
 
     Returns
@@ -79,8 +79,9 @@ def canonicalize(
         ``quality_score``. If ``df`` is empty an empty canonicalised dataframe
         is returned and metadata files are still written with zero counts.
     """
-    if tz_of_source is None:
-        tz_of_source = ET_TZ.zone
+    if source_time_basis is None:
+        source_time_basis = df.attrs.get("source_time_basis", ET_TZ.zone)
+    source_tz = pytz.timezone(source_time_basis)
 
     working = df.copy()
     ohlc_cols = ["open", "high", "low", "close"]
@@ -96,7 +97,7 @@ def canonicalize(
             "gaps": 0,
             "contract_version": contract_version,
             "source": source,
-            "tz_of_source": tz_of_source,
+            "source_time_basis": source_time_basis,
             "loaded_at": pd.Timestamp.utcnow().isoformat(),
             "clip_count": clip_count,
         }
@@ -114,9 +115,9 @@ def canonicalize(
     # Timestamp normalisation
     ts = pd.to_datetime(working["timestamp"])
     if ts.dt.tz is None:
-        ts = ts.dt.tz_localize(ET_TZ)
+        ts = ts.dt.tz_localize(source_tz)
     else:
-        ts = ts.dt.tz_convert(ET_TZ)
+        ts = ts.dt.tz_convert(source_tz)
     ts = ts.dt.tz_convert("UTC")
     working["timestamp"] = ts
 
@@ -167,7 +168,7 @@ def canonicalize(
         "gaps": gap_count,
         "contract_version": contract_version,
         "source": source,
-        "tz_of_source": tz_of_source,
+        "source_time_basis": source_time_basis,
         "loaded_at": pd.Timestamp.utcnow().isoformat(),
         "clip_count": clip_count,
     }
