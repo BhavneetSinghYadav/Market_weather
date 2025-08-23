@@ -14,11 +14,12 @@ import logging
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
 from mw.live.health import evaluate_freshness
+from mw.utils.params import MinuteLoopParams, Params
 from mw.utils.persistence import write_parquet
 from mw.utils.time import floor_to_minute, now_utc
 
@@ -30,7 +31,7 @@ def run_minute_loop(
     log_fn: Callable,
     plot_fn: Callable,
     health_fn: Callable,
-    params: Dict[str, Any],
+    params: Union["MinuteLoopParams", "Params", None],
     error_fn: Optional[Callable[[str, Exception], None]] = None,
     last_bar_ts_fn: Optional[Callable[[], Optional[datetime]]] = None,
     stale_fn: Optional[Callable[[float], None]] = None,
@@ -42,24 +43,23 @@ def run_minute_loop(
     the current minute.
     """
 
-    offsets = params.get(
-        "minute_loop_offsets",
-        {
-            "poll": 3,
-            "compute": 5,
-            "persist": 6,
-            "log": 7,
-            "plot": 8,
-            "health": 9,
-        },
-    )
+    if params is None:
+        ml_params = MinuteLoopParams()
+    elif isinstance(params, MinuteLoopParams):
+        ml_params = params
+    elif isinstance(params, Params):
+        ml_params = params.minute_loop
+    else:
+        raise TypeError("params must be Params or MinuteLoopParams")
 
-    critical_steps = set(params.get("minute_loop_critical_steps", []))
+    offsets = ml_params.offsets
+
+    critical_steps = set(ml_params.critical_steps)
 
     minute_start = floor_to_minute(now_utc())
 
     stale = False
-    stale_thresh = params.get("freshness_stale_threshold", 180.0)
+    stale_thresh = ml_params.freshness_stale_threshold
 
     def freshness_check() -> None:
         nonlocal stale

@@ -1,3 +1,4 @@
+# isort:skip_file
 import csv
 import sys
 from datetime import datetime, timedelta, timezone
@@ -12,8 +13,11 @@ from mw.features.smoothing import ema  # noqa: E402
 from mw.io.canonicalizer import canonicalize  # noqa: E402
 from mw.live import minute_loop  # noqa: E402
 from mw.live.logger import SessionLogger  # noqa: E402
-from mw.scoring.tradability import (score_tradability,  # noqa: E402
-                                    state_machine)
+from mw.scoring.tradability import (  # noqa: E402
+    score_tradability,
+    state_machine,
+)
+from mw.utils.params import Params  # noqa: E402
 
 
 def test_pipeline_integration(monkeypatch, tmp_path):
@@ -105,11 +109,18 @@ def test_live_pipeline_persists_outputs(monkeypatch, tmp_path):
     def health():
         pass
 
-    params = {"minute_loop_offsets": {}}
+    params = Params()
+    params.minute_loop.offsets = {}
 
     for _ in range(2):
         minute_loop.run_minute_loop(
-            poll, compute, persist, log, plot, health, params
+            poll,
+            compute,
+            persist,
+            log,
+            plot,
+            health,
+            params,
         )
     logger.close()
 

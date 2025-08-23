@@ -1,3 +1,4 @@
+# isort:skip_file
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from mw.features.entropy import (  # noqa: E402
     rolling_permutation_entropy,
     sample_entropy,
 )
+from mw.utils.params import Params  # noqa: E402
 
 
 def test_monotonic_series_has_zero_entropy():
@@ -31,13 +33,19 @@ def test_random_series_has_high_entropy():
 
 def test_rolling_permutation_entropy_alignment():
     series = pd.Series([1, 3, 2, 4, 5, 0])
-    window = 4
-    result = rolling_permutation_entropy(series, window=window)
+    params = Params()
+    params.pe.window = 4
+    result = rolling_permutation_entropy(
+        series,
+        window=params.pe.window,
+        m=params.pe.m,
+        tau=params.pe.tau,
+    )
 
     expected = pd.Series([np.nan] * len(series))
-    for i in range(window - 1, len(series)):
+    for i in range(params.pe.window - 1, len(series)):
         expected.iloc[i] = permutation_entropy(
-            series.iloc[i - window + 1 : i + 1]
+            series.iloc[i - params.pe.window + 1 : i + 1]  # noqa: E203
         )
 
     pd.testing.assert_series_equal(result, expected)

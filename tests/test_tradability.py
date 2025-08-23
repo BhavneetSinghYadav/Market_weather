@@ -10,6 +10,7 @@ from mw.scoring.tradability import (  # noqa: E402
     score_tradability,
     state_machine,
 )
+from mw.utils.params import ScoreParams  # noqa: E402
 
 
 def test_score_tradability_default_weights_align_and_clip():
@@ -25,10 +26,10 @@ def test_score_tradability_default_weights_align_and_clip():
 def test_score_tradability_custom_weights_and_clip():
     e_hat = pd.Series([-0.5, 2.0])
     l_hat = pd.Series([-0.5, 2.0])
-    weights = {"w1": 0.5, "w2": 0.5}
+    params = ScoreParams(w1=0.5, w2=0.5)
     expected = pd.Series([1.0, 0.0])
 
-    result = score_tradability(e_hat, l_hat, weights)
+    result = score_tradability(e_hat, l_hat, params)
 
     pd.testing.assert_series_equal(result, expected)
 
@@ -50,7 +51,7 @@ def test_state_machine_hysteresis_and_spacing():
         index=scores.index,
     )
 
-    result = state_machine(scores)
+    result = state_machine(scores, params=ScoreParams())
 
     pd.testing.assert_series_equal(result, expected)
 

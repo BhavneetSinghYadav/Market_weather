@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from mw.live.minute_loop import run_minute_loop  # noqa: E402
+from mw.utils.params import Params  # noqa: E402
 
 
 def test_run_minute_loop_calls_functions_in_order(monkeypatch):
@@ -41,15 +42,14 @@ def test_run_minute_loop_calls_functions_in_order(monkeypatch):
         lambda: next(times_iter),
     )
 
-    params = {
-        "minute_loop_offsets": {
-            "poll": 3,
-            "compute": 6,
-            "persist": 7,
-            "log": 8,
-            "plot": 9,
-            "health": 10,
-        }
+    params = Params()
+    params.minute_loop.offsets = {
+        "poll": 3,
+        "compute": 6,
+        "persist": 7,
+        "log": 8,
+        "plot": 9,
+        "health": 10,
     }
 
     run_minute_loop(poll, compute, persist, log, plot, health, params)
@@ -91,7 +91,8 @@ def test_run_minute_loop_continues_after_failure(monkeypatch):
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
 
-    params = {"minute_loop_offsets": {}}
+    params = Params()
+    params.minute_loop.offsets = {}
 
     run_minute_loop(poll, compute, persist, log, plot, health, params)
 
@@ -127,9 +128,19 @@ def test_run_minute_loop_calls_error_fn(monkeypatch):
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
 
-    params = {"minute_loop_offsets": {}}
+    params = Params()
+    params.minute_loop.offsets = {}
 
-    run_minute_loop(poll, compute, persist, log, plot, health, params, error_fn)
+    run_minute_loop(
+        poll,
+        compute,
+        persist,
+        log,
+        plot,
+        health,
+        params,
+        error_fn,
+    )
 
     assert errors and errors[0][0] == "poll"
     assert isinstance(errors[0][1], RuntimeError)
@@ -161,7 +172,9 @@ def test_run_minute_loop_skips_remaining_on_critical_failure(monkeypatch):
     start = datetime(2024, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
 
-    params = {"minute_loop_offsets": {}, "minute_loop_critical_steps": ["poll"]}
+    params = Params()
+    params.minute_loop.offsets = {}
+    params.minute_loop.critical_steps = ["poll"]
 
     run_minute_loop(poll, compute, persist, log, plot, health, params)
 
@@ -200,7 +213,9 @@ def test_run_minute_loop_skips_compute_when_stale(monkeypatch):
     def last_bar_ts():
         return datetime.now(timezone.utc) - timedelta(seconds=1000)
 
-    params = {"minute_loop_offsets": {}, "freshness_stale_threshold": 100.0}
+    params = Params()
+    params.minute_loop.offsets = {}
+    params.minute_loop.freshness_stale_threshold = 100.0
 
     run_minute_loop(
         poll,
@@ -249,7 +264,9 @@ def test_run_minute_loop_runs_all_when_fresh(monkeypatch):
     def last_bar_ts():
         return datetime.now(timezone.utc)
 
-    params = {"minute_loop_offsets": {}, "freshness_stale_threshold": 100.0}
+    params = Params()
+    params.minute_loop.offsets = {}
+    params.minute_loop.freshness_stale_threshold = 100.0
 
     run_minute_loop(
         poll,
@@ -263,5 +280,12 @@ def test_run_minute_loop_runs_all_when_fresh(monkeypatch):
         stale_fn=stale_handler,
     )
 
-    assert call_order == ["poll", "compute", "persist", "log", "plot", "health"]
+    assert call_order == [
+        "poll",
+        "compute",
+        "persist",
+        "log",
+        "plot",
+        "health",
+    ]
     assert "stale" not in call_order
