@@ -34,12 +34,14 @@ def plot_price_with_state(df: pd.DataFrame, state_series: pd.Series):
     ax.plot(df.index, price)
     ax.set_ylabel("price")
 
-    # Map each distinct state to a color from the matplotlib color cycle
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    state_colors = {
-        state: color_cycle[i % len(color_cycle)]
-        for i, state in enumerate(pd.unique(states.dropna()))
+    # Explicit color mapping for known states
+    color_map = {
+        "GREEN": "#00ff00",
+        "YELLOW": "#ffff00",
+        "RED": "#ff0000",
     }
+    unique_states = pd.unique(states.dropna())
+    state_colors = {state: color_map[state] for state in unique_states}
 
     # Group consecutive identical states and shade the corresponding regions
     groups = (states != states.shift()).cumsum()
