@@ -20,7 +20,7 @@ the dataframe for convenience.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import pytz
@@ -45,7 +45,12 @@ def _hash_df(df: pd.DataFrame) -> str:
 
 
 def canonicalize(
-    df: pd.DataFrame, parquet_path: str, contract_version: int = 1
+    df: pd.DataFrame,
+    parquet_path: str,
+    contract_version: int = 1,
+    *,
+    source: Optional[str] = None,
+    tz_of_source: Optional[str] = None,
 ) -> pd.DataFrame:
     """Canonicalise ``df`` and persist the result to ``parquet_path``.
 
@@ -61,6 +66,10 @@ def canonicalize(
         dataset.
     contract_version:
         Integer identifying the schema version of the canonical contract.
+    source:
+        Identifier describing the origin of ``df``.
+    tz_of_source:
+        Timezone string describing the timezone of the raw timestamps.
 
     Returns
     -------
@@ -70,6 +79,9 @@ def canonicalize(
         ``quality_score``. If ``df`` is empty an empty canonicalised dataframe
         is returned and metadata files are still written with zero counts.
     """
+    if tz_of_source is None:
+        tz_of_source = ET_TZ.zone
+
     working = df.copy()
     ohlc_cols = ["open", "high", "low", "close"]
 
@@ -84,6 +96,10 @@ def canonicalize(
             "duplicates": 0,
             "gaps": 0,
             "contract_version": contract_version,
+            "source": source,
+            "tz_of_source": tz_of_source,
+            "loaded_at": pd.Timestamp.utcnow().isoformat(),
+            "clip_count": 0,
         }
         metadata["hash"] = _hash_df(working)
         out_df = working.reset_index().rename(columns={"index": "timestamp"})
@@ -137,6 +153,10 @@ def canonicalize(
         "duplicates": duplicate_count,
         "gaps": gap_count,
         "contract_version": contract_version,
+        "source": source,
+        "tz_of_source": tz_of_source,
+        "loaded_at": pd.Timestamp.utcnow().isoformat(),
+        "clip_count": 0,
     }
     metadata["hash"] = _hash_df(working)
 

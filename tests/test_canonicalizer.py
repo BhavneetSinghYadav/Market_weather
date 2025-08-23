@@ -30,7 +30,12 @@ def make_sample_df():
 def test_canonicalize_end_to_end(tmp_path):
     raw = make_sample_df()
     out = tmp_path / "data.parquet"
-    canonicalize(raw, out.as_posix())
+    canonicalize(
+        raw,
+        out.as_posix(),
+        source="unit_test",
+        tz_of_source="America/New_York",
+    )
 
     result = pd.read_parquet(out)
     result["timestamp"] = pd.to_datetime(result["timestamp"], utc=True)
@@ -69,6 +74,10 @@ def test_canonicalize_end_to_end(tmp_path):
     assert meta["gaps"] == 1
     assert meta["contract_version"] == 1
     assert isinstance(meta["hash"], str) and len(meta["hash"]) == 64
+    assert meta["source"] == "unit_test"
+    assert meta["tz_of_source"] == "America/New_York"
+    assert isinstance(meta["loaded_at"], str)
+    assert meta["clip_count"] == 0
 
 
 def test_canonicalize_invalid_ohlc(tmp_path):
@@ -115,6 +124,10 @@ def test_canonicalize_empty(tmp_path):
     assert meta["rows"] == 0
     assert meta["duplicates"] == 0
     assert meta["gaps"] == 0
+    assert "source" in meta
+    assert "tz_of_source" in meta
+    assert isinstance(meta["loaded_at"], str)
+    assert meta["clip_count"] == 0
 
 
 def test_is_session_weekend(tmp_path):
