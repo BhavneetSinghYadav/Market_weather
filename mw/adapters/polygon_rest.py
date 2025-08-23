@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import timedelta
 from typing import Iterator
 
@@ -50,8 +51,18 @@ def fetch_fx_agg_minute(
         "limit": limit,
         "apiKey": api_key,
     }
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
+    resp = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            if attempt == 2:
+                raise RuntimeError(
+                    f"Polygon API request failed after 3 attempts: {exc}"
+                ) from exc
+            time.sleep(2**attempt)
     data = resp.json()
     results = data.get("results", [])
     if not results:
