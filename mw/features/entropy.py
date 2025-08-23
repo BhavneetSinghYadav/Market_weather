@@ -18,6 +18,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 
 
 def _ordinal_patterns(
@@ -104,14 +105,15 @@ def sample_entropy(series: pd.Series, m: int = 2, r: float = 0.2) -> float:
     theiler = m  # Exclude temporally adjacent vectors
 
     def _match_fraction(embed: np.ndarray) -> float:
-        matches = 0
-        total = 0
         n_vec = embed.shape[0]
-        for i in range(n_vec - 1):
-            for j in range(i + theiler + 1, n_vec):
-                total += 1
-                if np.max(np.abs(embed[i] - embed[j])) <= tol:
-                    matches += 1
+        if n_vec <= theiler + 1:
+            return float("nan")
+
+        tree = cKDTree(embed)
+        # Pairs within Chebyshev distance ``tol``
+        pairs = tree.query_pairs(tol, p=np.inf)
+        matches = sum(1 for i, j in pairs if j - i > theiler)
+        total = ((n_vec - theiler - 1) * (n_vec - theiler)) // 2
         if total == 0:
             return float("nan")
         return matches / total
