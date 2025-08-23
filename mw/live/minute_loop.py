@@ -2,7 +2,7 @@
 
 This module coordinates the high level steps executed every minute:
 
-``poll -> compute -> persist -> plot -> health``.
+``poll -> compute -> persist -> log -> plot -> health``.
 
 The function waits for configured offsets from the start of the current
 minute before invoking each step so that calls are synchronised with
@@ -22,6 +22,7 @@ def run_minute_loop(
     poll_fn: Callable,
     compute_fn: Callable,
     persist_fn: Callable,
+    log_fn: Callable,
     plot_fn: Callable,
     health_fn: Callable,
     params: Dict[str, Any],
@@ -36,7 +37,14 @@ def run_minute_loop(
 
     offsets = params.get(
         "minute_loop_offsets",
-        {"poll": 3, "compute": 5, "persist": 6, "plot": 7, "health": 8},
+        {
+            "poll": 3,
+            "compute": 5,
+            "persist": 6,
+            "log": 7,
+            "plot": 8,
+            "health": 9,
+        },
     )
 
     critical_steps = set(params.get("minute_loop_critical_steps", []))
@@ -47,6 +55,7 @@ def run_minute_loop(
         ("poll", poll_fn),
         ("compute", compute_fn),
         ("persist", persist_fn),
+        ("log", log_fn),
         ("plot", plot_fn),
         ("health", health_fn),
     ]
