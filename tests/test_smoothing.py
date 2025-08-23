@@ -33,3 +33,11 @@ def test_ema_matches_manual_calculation_and_preserves_index():
     assert result.index.equals(x.index)
     assert result.tolist() == pytest.approx(expected.tolist())
 
+
+def test_ema_raises_on_non_positive_span():
+    x = pd.Series([1.0, 2.0])
+
+    for invalid_span in (0, -1):
+        with pytest.raises(ValueError):
+            ema(x, span=invalid_span)
+
