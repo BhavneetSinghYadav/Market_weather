@@ -58,3 +58,14 @@ def test_tod_percentile_transform_computes_percentiles():
     expected = pd.Series([0.5, 0.5, 1.0], index=idx)
     assert result.tolist() == pytest.approx(expected.tolist())
     assert result.between(0, 1).all()
+
+
+def test_tod_percentile_transform_handles_missing_minutes():
+    """Missing model entries should produce NaNs instead of errors."""
+    model = {0: np.array([1, 3])}  # minute 1 deliberately absent
+    idx = pd.to_datetime(["2024-01-03 00:00", "2024-01-03 00:01"])
+    x = pd.Series([2, 3], index=idx)
+    result = tod_percentile_transform(x, model)
+
+    assert result.iloc[0] == pytest.approx(0.5)
+    assert np.isnan(result.iloc[1])

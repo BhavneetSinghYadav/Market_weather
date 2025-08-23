@@ -87,7 +87,8 @@ def tod_percentile_transform(
     Returns
     -------
     pd.Series
-        Series of percentile scores in ``[0, 1]``.
+        Series of percentile scores in ``[0, 1]``. Minutes not present in the
+        ``model`` yield ``NaN`` values instead of raising ``KeyError``.
     """
 
     if not isinstance(x.index, pd.DatetimeIndex):
