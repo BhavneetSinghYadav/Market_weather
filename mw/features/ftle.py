@@ -104,7 +104,12 @@ def rolling_ftle_rosenstein(
     horizon: int = 10,
     theiler: int = 2,
 ) -> pd.Series:
-    """Causal rolling FTLE using Rosenstein's method."""
+    """Apply :func:`ftle_rosenstein` over a causal rolling window.
+
+    The returned series is aligned to the end of each window. ``NaN`` is
+    emitted for positions with insufficient data, whether due to an incomplete
+    window or the embedding/horizon parameters not providing enough vectors.
+    """
 
     def _apply(x: pd.Series) -> float:
         return ftle_rosenstein(
