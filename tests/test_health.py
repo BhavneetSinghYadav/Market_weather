@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from mw.live.health import compute_freshness
+import pytest
+
+from mw.live.health import compute_freshness, should_degrade
 
 
 def test_compute_freshness_elapsed_seconds():
@@ -15,3 +17,15 @@ def test_compute_freshness_elapsed_seconds():
 
 def test_compute_freshness_missing_timestamp():
     assert compute_freshness(None) == float("inf")
+
+
+@pytest.mark.parametrize(
+    "freshness, expected",
+    [
+        (179.0, False),
+        (180.0, False),
+        (181.0, True),
+    ],
+)
+def test_should_degrade_threshold_boundary(freshness, expected):
+    assert should_degrade(freshness) is expected

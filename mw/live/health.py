@@ -32,7 +32,9 @@ def should_degrade(freshness_s: float, thresh: float = 180.0) -> bool:
     freshness_s: float
         Age of the last data point in seconds.
     thresh: float
-        Threshold in seconds before degradation should occur.
+        Threshold in seconds before degradation should occur. The default of
+        ``180`` seconds (three minutes) represents the service's acceptable age
+        for data before degradation.
     """
 
-    return freshness_s >= thresh
+    return freshness_s > thresh
