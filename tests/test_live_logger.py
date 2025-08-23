@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from mw.live.logger import SessionLogger  # noqa: E402
+from mw.live.logger import GapEvent, SessionLogger  # noqa: E402
 
 
 def test_session_logger_writes_csv_and_summary(tmp_path):
@@ -35,3 +35,18 @@ def test_session_logger_writes_csv_and_summary(tmp_path):
     assert summary["rows"] == 2
     assert "start" in summary and "end" in summary
     assert summary["session"] == "abc"
+
+
+def test_session_logger_records_gaps(tmp_path):
+    csv_path = tmp_path / "log.csv"
+    summary_path = tmp_path / "summary.json"
+    logger = SessionLogger(csv_path, summary_path)
+
+    event = GapEvent(datetime(2024, 1, 1, tzinfo=timezone.utc), "EURUSD", "no bar")
+    logger.log_gap(event)
+    logger.close()
+
+    assert logger.gap_count == 1
+    assert logger.gap_events[0] == event
+    summary = json.loads(summary_path.read_text())
+    assert summary["gap_count"] == 1

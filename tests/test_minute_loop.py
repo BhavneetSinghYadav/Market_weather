@@ -4,8 +4,11 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import pandas as pd
+
 from mw.live.minute_loop import run_minute_loop  # noqa: E402
 from mw.utils.params import Params  # noqa: E402
+from mw.live.logger import SessionLogger  # noqa: E402
 
 
 def test_run_minute_loop_calls_functions_in_order(monkeypatch):
@@ -289,3 +292,51 @@ def test_run_minute_loop_runs_all_when_fresh(monkeypatch):
         "health",
     ]
     assert "stale" not in call_order
+
+
+def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    from mw.live import minute_loop as ml
+    ml._LAST_TS_SEEN = None
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    ts = pd.date_range("2024-01-01", periods=2, freq="1min", tz="UTC")
+    df1 = pd.DataFrame({"timestamp": ts, "v": [1, 2]})
+    df2 = pd.DataFrame(
+        {"timestamp": [ts[1], ts[1] + pd.Timedelta(minutes=1)], "v": [3, 4]}
+    )
+    df3 = pd.DataFrame({"timestamp": [ts[1] + pd.Timedelta(minutes=3)], "v": [5]})
+    data_iter = iter([df1, df2, df3])
+
+    def poll():
+        return next(data_iter)
+
+    dummy = lambda: None
+
+    params = Params()
+    params.minute_loop.offsets = {}
+
+    logger = SessionLogger(Path("decisions.csv"), Path("summary.json"))
+
+    for _ in range(3):
+        run_minute_loop(
+            poll,
+            dummy,
+            dummy,
+            dummy,
+            dummy,
+            dummy,
+            params,
+            session_logger=logger,
+        )
+
+    path = Path("data") / "minute_bars.parquet"
+    df = pd.read_parquet(path)
+    assert list(df["timestamp"]) == [
+        ts[0],
+        ts[1],
+        ts[1] + pd.Timedelta(minutes=1),
+        ts[1] + pd.Timedelta(minutes=3),
+    ]
+    assert logger.gap_count == 1

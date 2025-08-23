@@ -10,20 +10,31 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from mw.utils.persistence import append_csv, write_json
 from mw.utils.time import now_utc
 
 
 @dataclass
+class GapEvent:
+    """Represents a missing minute bar in the data feed."""
+
+    timestamp: datetime
+    symbol: str
+    reason: str
+
+
+@dataclass
 class SessionLogger:
-    """Log per-minute results and summarise the session."""
+    """Log per-minute results, gaps and summarise the session."""
 
     csv_path: Path
     summary_path: Path
     start: datetime = field(default_factory=now_utc)
     rows: int = 0
+    gap_events: List[GapEvent] = field(default_factory=list)
+    gap_count: int = 0
 
     def log_minute(
         self,
@@ -53,6 +64,13 @@ class SessionLogger:
             "start": self.start.isoformat(),
             "end": now_utc().isoformat(),
             "rows": self.rows,
+            "gap_count": self.gap_count,
         }
         summary.update(extra)
         write_json(summary, self.summary_path.as_posix())
+
+    def log_gap(self, event: GapEvent) -> None:
+        """Record a missing minute bar event."""
+
+        self.gap_events.append(event)
+        self.gap_count += 1
