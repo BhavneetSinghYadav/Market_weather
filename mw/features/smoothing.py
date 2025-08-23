@@ -20,7 +20,14 @@ def ema(series: pd.Series, span: int = 3) -> pd.Series:
     -------
     pd.Series
         Exponentially weighted moving average aligned with the input index.
+    
+    Raises
+    ------
+    ValueError
+        If ``span`` is less than or equal to zero.
     """
+    if span <= 0:
+        raise ValueError("span must be positive")
 
     result = series.ewm(span=span, adjust=False).mean()
     return result.loc[series.index]
