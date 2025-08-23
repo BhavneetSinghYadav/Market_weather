@@ -19,9 +19,60 @@ from typing import Any, Callable, Optional, Union
 import pandas as pd
 
 from mw.live.health import evaluate_freshness
+from mw.live.logger import GapEvent, SessionLogger
 from mw.utils.params import MinuteLoopParams, Params
 from mw.utils.persistence import write_parquet
 from mw.utils.time import floor_to_minute, now_utc
+
+
+_LAST_TS_SEEN: Optional[datetime] = None
+_BARS_PATH = Path("data") / "minute_bars.parquet"
+
+
+def _append_polled_bars(
+    new: Optional[pd.DataFrame],
+    logger: Optional[SessionLogger],
+    symbol: str,
+) -> None:
+    """Append new minute bars to parquet, log gaps and update state."""
+
+    global _LAST_TS_SEEN
+    if new is None or new.empty:
+        if _LAST_TS_SEEN is not None and logger is not None:
+            missing = _LAST_TS_SEEN + timedelta(minutes=1)
+            logger.log_gap(GapEvent(missing, symbol, "no bar returned by /v2 aggs"))
+            _LAST_TS_SEEN = missing
+        return
+
+    new = new.sort_values("timestamp").drop_duplicates(subset=["timestamp"])
+    if _LAST_TS_SEEN is not None:
+        new = new[new["timestamp"] > _LAST_TS_SEEN]
+        if new.empty:
+            missing = _LAST_TS_SEEN + timedelta(minutes=1)
+            if logger is not None:
+                logger.log_gap(GapEvent(missing, symbol, "no bar returned by /v2 aggs"))
+            _LAST_TS_SEEN = missing
+            return
+        first_ts = new["timestamp"].iloc[0]
+        expected = _LAST_TS_SEEN + timedelta(minutes=1)
+        while expected < first_ts:
+            if logger is not None:
+                logger.log_gap(GapEvent(expected, symbol, "no bar returned by /v2 aggs"))
+            _LAST_TS_SEEN = expected
+            expected += timedelta(minutes=1)
+
+    _LAST_TS_SEEN = new["timestamp"].max()
+
+    if _BARS_PATH.exists():
+        existing = pd.read_parquet(_BARS_PATH)
+        combined = (
+            pd.concat([existing, new], ignore_index=True)
+            .drop_duplicates(subset=["timestamp"])
+            .sort_values("timestamp")
+        )
+    else:
+        combined = new
+    write_parquet(combined, _BARS_PATH.as_posix())
 
 
 def run_minute_loop(
@@ -35,6 +86,7 @@ def run_minute_loop(
     error_fn: Optional[Callable[[str, Exception], None]] = None,
     last_bar_ts_fn: Optional[Callable[[], Optional[datetime]]] = None,
     stale_fn: Optional[Callable[[float], None]] = None,
+    session_logger: Optional[SessionLogger] = None,
 ) -> None:
     """High-level loop; call every minute (t+3s).
 
@@ -57,6 +109,7 @@ def run_minute_loop(
     critical_steps = set(ml_params.critical_steps)
 
     minute_start = floor_to_minute(now_utc())
+    symbol = getattr(params, "symbol", "") if params is not None else ""
 
     stale = False
     stale_thresh = ml_params.freshness_stale_threshold
@@ -72,8 +125,13 @@ def run_minute_loop(
             if stale_fn is not None:
                 stale_fn(freshness)
 
+    def poll_step() -> None:
+        data = poll_fn()
+        if isinstance(data, pd.DataFrame):
+            _append_polled_bars(data, session_logger, symbol)
+
     steps = [
-        ("poll", poll_fn),
+        ("poll", poll_step),
         ("freshness", freshness_check),
         ("compute", compute_fn),
         ("persist", persist_fn),
