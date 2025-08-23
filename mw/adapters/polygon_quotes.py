@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import random
-import time
 from typing import List
 
 import pandas as pd
 import requests
 
-from .polygon_rest import BASE_URL, _get_api_key, _get_session, _REQUESTS_GET
+from .polygon_rest import BASE_URL, _get_api_key, _request_with_retry
 
 
 def fetch_quotes(
@@ -45,24 +43,14 @@ def fetch_quotes(
         "order": "asc",
         "apiKey": api_key,
     }
-    session = _get_session()
-    get_call = session.get if requests.get is _REQUESTS_GET else requests.get
-
     all_results: List[dict] = []
     while url:
-        resp = None
-        for attempt in range(3):
-            resp = get_call(url, params=params if params is not None else None, timeout=10)
-            if resp.status_code == 429 or resp.status_code >= 500:
-                if attempt == 2:
-                    resp.raise_for_status()
-                sleep_time = (2**attempt) + random.uniform(0, 1)
-                time.sleep(sleep_time)
-                continue
-            resp.raise_for_status()
-            break
-        else:  # pragma: no cover - safety
-            raise RuntimeError("Polygon API request failed")
+        try:
+            resp = _request_with_retry(
+                url, params=params if params is not None else None
+            )
+        except requests.RequestException as exc:  # pragma: no cover - safety
+            raise RuntimeError("Polygon API request failed") from exc
 
         data = resp.json()
         results = data.get("results", [])

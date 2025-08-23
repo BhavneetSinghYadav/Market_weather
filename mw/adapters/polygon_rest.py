@@ -33,6 +33,47 @@ def _get_api_key() -> str:
     return api_key
 
 
+def _request_with_retry(
+    url: str,
+    params: dict | None = None,
+    *,
+    timeout: int = 10,
+    max_attempts: int = 3,
+) -> requests.Response:
+    """Make a GET request with retry logic.
+
+    Retries on HTTP 429 and 5xx responses using a jittered exponential
+    backoff.  If the response includes a ``Retry-After`` header it is used
+    verbatim for the sleep interval.
+    """
+
+    session = _get_session()
+    get_call = session.get if requests.get is _REQUESTS_GET else requests.get
+
+    for attempt in range(max_attempts):
+        resp = get_call(url, params=params, timeout=timeout)
+        if resp.status_code == 429 or resp.status_code >= 500:
+            if attempt == max_attempts - 1:
+                resp.raise_for_status()
+            retry_after = resp.headers.get("Retry-After")
+            if retry_after is not None:
+                try:
+                    sleep_time = float(retry_after)
+                except ValueError:  # pragma: no cover - safety
+                    sleep_time = 0
+                if sleep_time <= 0:
+                    sleep_time = (2**attempt) + random.uniform(0, 1)
+            else:
+                sleep_time = (2**attempt) + random.uniform(0, 1)
+            time.sleep(sleep_time)
+            continue
+        resp.raise_for_status()
+        return resp
+
+    # Should not reach here; raise for completeness.
+    resp.raise_for_status()
+
+
 def fetch_fx_agg_minute(
     symbol: str, start: str | int, end: str | int, limit: int = 50_000
 ) -> pd.DataFrame:
@@ -63,21 +104,12 @@ def fetch_fx_agg_minute(
         "limit": limit,
         "apiKey": api_key,
     }
-    session = _get_session()
-    get_call = session.get if requests.get is _REQUESTS_GET else requests.get
-    resp = None
-    for attempt in range(3):
-        try:
-            resp = get_call(url, params=params, timeout=10)
-            resp.raise_for_status()
-            break
-        except requests.RequestException as exc:
-            if attempt == 2:
-                raise RuntimeError(
-                    f"Polygon API request failed after 3 attempts: {exc}"
-                ) from exc
-            sleep_time = (2**attempt) + random.uniform(0, 1)
-            time.sleep(sleep_time)
+    try:
+        resp = _request_with_retry(url, params=params)
+    except requests.RequestException as exc:  # pragma: no cover - safety
+        raise RuntimeError(
+            f"Polygon API request failed after 3 attempts: {exc}"
+        ) from exc
     try:
         data = resp.json()
     except ValueError as exc:
