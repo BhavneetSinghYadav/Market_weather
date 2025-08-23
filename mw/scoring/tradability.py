@@ -7,8 +7,7 @@ Exports:
 - score_tradability(e_hat: pd.Series, l_hat: pd.Series, weights: dict = None)
   -> pd.Series
 - state_machine(scores: pd.Series, prev_state: str = None,
-                thresholds: dict = None, hysteresis: dict = None,
-                timestamps: pd.Series | None = None) -> pd.Series
+                thresholds: dict = None, hysteresis: dict = None) -> pd.Series
 """
 
 from typing import Optional
@@ -45,7 +44,6 @@ def state_machine(
     prev_state: Optional[str] = None,
     thresholds: dict = None,
     hysteresis: dict = None,
-    timestamps: Optional[pd.Series] = None,
 ) -> pd.Series:
     """
     Map scores to RED/YELLOW/GREEN with hysteresis:
@@ -53,9 +51,6 @@ def state_machine(
     - require ``k_down`` consecutive <= ``tau_y`` to turn RED
     - otherwise YELLOW
     - throttle flips by ``min_flip_spacing`` observations.
-
-    ``timestamps`` is accepted for future compatibility but spacing is
-    currently measured in number of observations.
     """
     thresholds = thresholds or DEFAULT_THRESH
     thresholds = {

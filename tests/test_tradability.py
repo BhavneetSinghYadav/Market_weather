@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from mw.scoring.tradability import (  # noqa: E402
@@ -52,3 +53,10 @@ def test_state_machine_hysteresis_and_spacing():
     result = state_machine(scores)
 
     pd.testing.assert_series_equal(result, expected)
+
+
+def test_state_machine_rejects_timestamps_argument():
+    scores = pd.Series([0.5, 0.7])
+    ts = pd.Series([1, 2])
+    with pytest.raises(TypeError):
+        state_machine(scores, timestamps=ts)
