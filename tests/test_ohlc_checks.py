@@ -22,3 +22,33 @@ def test_validate_ohlc_various_rows():
     result = validate_ohlc(df)
     pd.testing.assert_series_equal(result, expected, check_names=False)
 
+
+def test_validate_ohlc_clip_and_flags():
+    df = pd.DataFrame(
+        {
+            "open": [1.0, 4.0],
+            "high": [3.0, 5.0],
+            "low": [2.0, 4.5],
+            "close": [2.5, 6.0],
+        }
+    )
+    mask, clipped, flags = validate_ohlc(
+        df, return_clipped=True, return_flags=True
+    )
+
+    expected_mask = pd.Series([False, False])
+    pd.testing.assert_series_equal(mask, expected_mask, check_names=False)
+
+    expected_clipped = pd.DataFrame(
+        {
+            "open": [2.0, 4.5],
+            "high": [3.0, 5.0],
+            "low": [2.0, 4.5],
+            "close": [2.5, 5.0],
+        }
+    )
+    pd.testing.assert_frame_equal(clipped, expected_clipped)
+
+    expected_flags = df != expected_clipped
+    pd.testing.assert_frame_equal(flags, expected_flags)
+

@@ -91,12 +91,56 @@ def test_canonicalize_invalid_ohlc(tmp_path):
         }
     )
     out = tmp_path / "bad.parquet"
+    result = canonicalize(bad, out.as_posix())
 
-    with pytest.raises(ValueError):
-        canonicalize(bad, out.as_posix())
+    assert not result.empty
 
-    assert not out.exists()
-    assert not Path(str(out) + ".meta.json").exists()
+    result_df = pd.read_parquet(out)
+    result_df["timestamp"] = pd.to_datetime(result_df["timestamp"], utc=True)
+    expected = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2024-01-01 14:30", tz="UTC")],
+            "open": [1.0],
+            "high": [2.0],
+            "low": [1.0],
+            "close": [1.0],
+            "is_gap": [False],
+            "minute_of_day": [870],
+            "is_session": [True],
+            "quality_score": [1.0],
+        }
+    )
+    expected["minute_of_day"] = expected["minute_of_day"].astype(
+        result_df["minute_of_day"].dtype
+    )
+    pd.testing.assert_frame_equal(result_df, expected)
+
+    with Path(str(out) + ".meta.json").open() as f:
+        meta = json.load(f)
+
+    assert meta["clip_count"] == 1
+
+
+def test_canonicalize_drop_unfixable_row(tmp_path):
+    bad = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-01 09:30"],
+            "open": [1.0],
+            "high": [float("nan")],
+            "low": [float("nan")],
+            "close": [1.0],
+        }
+    )
+    out = tmp_path / "drop.parquet"
+    result = canonicalize(bad, out.as_posix())
+
+    assert result.empty
+
+    with Path(str(out) + ".meta.json").open() as f:
+        meta = json.load(f)
+
+    assert meta["rows"] == 0
+    assert meta["clip_count"] == 1
 
 
 def test_canonicalize_empty(tmp_path):
