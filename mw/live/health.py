@@ -3,10 +3,11 @@
 Exports:
 - compute_freshness(last_bar_ts) -> float seconds
 - should_degrade(freshness_s: float, thresh: float = 180) -> bool
+- evaluate_freshness(last_bar_ts, thresh=180) -> (freshness_s, degrade)
 """
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 
 def compute_freshness(last_bar_ts: Optional[datetime]) -> float:
@@ -38,3 +39,17 @@ def should_degrade(freshness_s: float, thresh: float = 180.0) -> bool:
     """
 
     return freshness_s > thresh
+
+
+def evaluate_freshness(
+    last_bar_ts: Optional[datetime], thresh: float = 180.0
+) -> Tuple[float, bool]:
+    """Return ``(freshness_s, should_degrade)`` for ``last_bar_ts``.
+
+    This convenience wrapper combines :func:`compute_freshness` and
+    :func:`should_degrade` to provide a single call that yields the age of the
+    data point and whether that age breaches the supplied ``thresh``.
+    """
+
+    freshness = compute_freshness(last_bar_ts)
+    return freshness, should_degrade(freshness, thresh)

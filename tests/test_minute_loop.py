@@ -33,6 +33,7 @@ def test_run_minute_loop_calls_functions_in_order(monkeypatch):
             start + timedelta(seconds=6),
             start + timedelta(seconds=7),
             start + timedelta(seconds=8),
+            start + timedelta(seconds=9),
         ]
     )
     monkeypatch.setattr(
@@ -61,7 +62,7 @@ def test_run_minute_loop_calls_functions_in_order(monkeypatch):
         "plot",
         "health",
     ]
-    assert sleeps == [1.0, 2.0, 0.0, 0.0, 0.0, 0.0]
+    assert sleeps == [1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 def test_run_minute_loop_continues_after_failure(monkeypatch):
@@ -165,3 +166,102 @@ def test_run_minute_loop_skips_remaining_on_critical_failure(monkeypatch):
     run_minute_loop(poll, compute, persist, log, plot, health, params)
 
     assert call_order == []
+
+
+def test_run_minute_loop_skips_compute_when_stale(monkeypatch):
+    call_order = []
+
+    def poll():
+        call_order.append("poll")
+
+    def compute():
+        call_order.append("compute")
+
+    def persist():
+        call_order.append("persist")
+
+    def log():
+        call_order.append("log")
+
+    def plot():
+        call_order.append("plot")
+
+    def health():
+        call_order.append("health")
+
+    def stale_handler(freshness):
+        call_order.append("stale")
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
+
+    def last_bar_ts():
+        return datetime.now(timezone.utc) - timedelta(seconds=1000)
+
+    params = {"minute_loop_offsets": {}, "freshness_stale_threshold": 100.0}
+
+    run_minute_loop(
+        poll,
+        compute,
+        persist,
+        log,
+        plot,
+        health,
+        params,
+        last_bar_ts_fn=last_bar_ts,
+        stale_fn=stale_handler,
+    )
+
+    assert call_order == ["poll", "stale", "health"]
+
+
+def test_run_minute_loop_runs_all_when_fresh(monkeypatch):
+    call_order = []
+
+    def poll():
+        call_order.append("poll")
+
+    def compute():
+        call_order.append("compute")
+
+    def persist():
+        call_order.append("persist")
+
+    def log():
+        call_order.append("log")
+
+    def plot():
+        call_order.append("plot")
+
+    def health():
+        call_order.append("health")
+
+    def stale_handler(freshness):
+        call_order.append("stale")
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
+
+    def last_bar_ts():
+        return datetime.now(timezone.utc)
+
+    params = {"minute_loop_offsets": {}, "freshness_stale_threshold": 100.0}
+
+    run_minute_loop(
+        poll,
+        compute,
+        persist,
+        log,
+        plot,
+        health,
+        params,
+        last_bar_ts_fn=last_bar_ts,
+        stale_fn=stale_handler,
+    )
+
+    assert call_order == ["poll", "compute", "persist", "log", "plot", "health"]
+    assert "stale" not in call_order
