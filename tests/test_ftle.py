@@ -26,14 +26,44 @@ def test_ftle_rosenstein_logistic_map():
     assert val == pytest.approx(np.log(2), abs=0.2)
 
 
-def test_rolling_matches_direct():
+@pytest.mark.parametrize(
+    "m,tau,horizon,theiler",
+    [
+        (2, 1, 5, 2),
+        (3, 2, 7, 3),
+    ],
+)
+def test_rolling_matches_direct(m: int, tau: int, horizon: int, theiler: int):
     data = logistic_map(4.0, 0.2, 300)
     series = pd.Series(data)
     window = 100
     rolling = rolling_ftle_rosenstein(
-        series, window=window, m=2, tau=1, horizon=5, theiler=2
+        series, window=window, m=m, tau=tau, horizon=horizon, theiler=theiler
     )
     direct = ftle_rosenstein(
-        series.iloc[-window:], window=window, m=2, tau=1, horizon=5, theiler=2
+        series.iloc[-window:],
+        window=window,
+        m=m,
+        tau=tau,
+        horizon=horizon,
+        theiler=theiler,
     )
     assert rolling.iloc[-1] == pytest.approx(direct)
+
+
+def test_rolling_alignment_and_nans():
+    data = logistic_map(4.0, 0.2, 150)
+    series = pd.Series(data)
+    window = 50
+    rolling = rolling_ftle_rosenstein(
+        series, window=window, m=2, tau=1, horizon=5, theiler=2
+    )
+
+    # first ``window-1`` entries should be NaN
+    assert rolling.iloc[: window - 1].isna().all()
+
+    # value at index ``window-1`` should equal FTLE of the first window
+    direct = ftle_rosenstein(
+        series.iloc[:window], window=window, m=2, tau=1, horizon=5, theiler=2
+    )
+    assert rolling.iloc[window - 1] == pytest.approx(direct)
