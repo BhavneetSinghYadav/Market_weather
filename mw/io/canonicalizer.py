@@ -65,19 +65,20 @@ def canonicalize(
     Returns
     -------
     pd.DataFrame
-        The canonicalised dataframe with a UTC ``timestamp`` index and an
-        ``is_gap`` column indicating missing minutes.  If ``df`` is empty an
-        empty canonicalised dataframe is returned and metadata files are still
-        written with zero counts.
+        The canonicalised dataframe with a UTC ``timestamp`` index and the
+        columns ``is_gap``, ``minute_of_day``, ``is_session`` and
+        ``quality_score``. If ``df`` is empty an empty canonicalised dataframe
+        is returned and metadata files are still written with zero counts.
     """
     working = df.copy()
     ohlc_cols = ["open", "high", "low", "close"]
 
     if working.empty:
         # Persist empty outputs early and return
-        working = pd.DataFrame(columns=ohlc_cols + ["is_gap"]).set_index(
-            pd.DatetimeIndex([], name="timestamp", tz="UTC")
-        )
+        working = pd.DataFrame(
+            columns=ohlc_cols
+            + ["is_gap", "minute_of_day", "is_session", "quality_score"]
+        ).set_index(pd.DatetimeIndex([], name="timestamp", tz="UTC"))
         metadata: Dict[str, Any] = {
             "rows": 0,
             "duplicates": 0,
@@ -124,6 +125,9 @@ def canonicalize(
 
     gap_mask = working[ohlc_cols].isna().all(axis=1)
     working["is_gap"] = gap_mask
+    working["minute_of_day"] = working.index.hour * 60 + working.index.minute
+    working["is_session"] = working.index.dayofweek < 5
+    working["quality_score"] = 1.0
     gap_count = int(gap_mask.sum())
 
     # ------------------------------------------------------------------
