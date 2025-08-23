@@ -1,13 +1,19 @@
-"""
-Scaling & normalization (stubs).
+"""Scaling & normalisation utilities.
 
-Exports:
-- minmax_causal(x: pd.Series, win: int) -> pd.Series in [0,1]
-- tod_percentile_fit(x: pd.Series) -> dict
-  # minute-of-day profiles (offline)
-- tod_percentile_transform(x: pd.Series, model: dict) -> pd.Series in [0,1]
+Exports
+-------
+- ``minmax_causal(x: pd.Series, win: int) -> pd.Series`` in ``[0, 1]``
+- ``tod_percentile_fit(x: pd.Series) -> dict``
+  minute-of-day profiles (offline)
+- ``tod_percentile_transform(x: pd.Series, model: dict) -> pd.Series`` in
+  ``[0, 1]``
 """
 
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
 import pandas as pd
 
 
@@ -40,13 +46,61 @@ def minmax_causal(x: pd.Series, win: int, eps: float = 1e-9) -> pd.Series:
     return scaled.clip(0.0, 1.0)
 
 
-def tod_percentile_fit(x: pd.Series) -> dict:
-    """Fit time-of-day percentile references (offline)."""
-    # TODO: implement
-    raise NotImplementedError
+def tod_percentile_fit(x: pd.Series) -> Dict[int, np.ndarray]:
+    """Fit time-of-day percentile references for offline use.
+
+    Parameters
+    ----------
+    x:
+        Series indexed by ``pd.DatetimeIndex`` containing the observations.
+
+    Returns
+    -------
+    dict
+        Dictionary mapping ``minute_of_day`` to a sorted array of past values
+        observed at that minute.  The arrays represent empirical
+        distributions which can later be used to compute percentiles.
+    """
+
+    if not isinstance(x.index, pd.DatetimeIndex):
+        raise TypeError("x must be indexed by a DatetimeIndex")
+
+    minute_of_day = x.index.hour * 60 + x.index.minute
+    groups = x.groupby(minute_of_day)
+    model = {int(m): g.sort_values().to_numpy() for m, g in groups}
+    return model
 
 
-def tod_percentile_transform(x: pd.Series, model: dict) -> pd.Series:
-    """Map values to [0,1] by minute-of-day percentiles."""
-    # TODO: implement
-    raise NotImplementedError
+def tod_percentile_transform(
+    x: pd.Series,
+    model: Dict[int, np.ndarray],
+) -> pd.Series:
+    """Map values to ``[0, 1]`` by minute-of-day percentiles.
+
+    Parameters
+    ----------
+    x:
+        Series indexed by ``pd.DatetimeIndex`` to transform.
+    model:
+        Output of :func:`tod_percentile_fit`.
+
+    Returns
+    -------
+    pd.Series
+        Series of percentile scores in ``[0, 1]``.
+    """
+
+    if not isinstance(x.index, pd.DatetimeIndex):
+        raise TypeError("x must be indexed by a DatetimeIndex")
+
+    minute_of_day = x.index.hour * 60 + x.index.minute
+    result = []
+    for val, mod in zip(x.to_numpy(), minute_of_day):
+        arr = model.get(int(mod))
+        if arr is None or len(arr) == 0:
+            result.append(np.nan)
+            continue
+        rank = np.searchsorted(arr, val, side="right")
+        result.append(rank / len(arr))
+
+    return pd.Series(result, index=x.index).clip(0.0, 1.0)
