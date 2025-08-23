@@ -68,4 +68,12 @@ def write_json(obj: Dict[str, Any], path: str) -> None:
         os.fsync(tmp.fileno())
         temp_name = tmp.name
 
-    os.replace(temp_name, target)
+    try:
+        os.replace(temp_name, target)
+    except OSError as err:
+        logging.error("Failed to write JSON file %s: %s", path, err)
+        try:
+            os.remove(temp_name)
+        except OSError:
+            pass
+        raise
