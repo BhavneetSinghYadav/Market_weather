@@ -5,7 +5,10 @@ import numpy as np
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from mw.features.entropy import permutation_entropy  # noqa: E402
+from mw.features.entropy import (  # noqa: E402
+    permutation_entropy,
+    rolling_permutation_entropy,
+)
 
 
 def test_monotonic_series_has_zero_entropy():
@@ -23,3 +26,17 @@ def test_random_series_has_high_entropy():
     series = pd.Series(rng.normal(size=1000))
     h = permutation_entropy(series, m=3, tau=1)
     assert h > 0.95
+
+
+def test_rolling_permutation_entropy_alignment():
+    series = pd.Series([1, 3, 2, 4, 5, 0])
+    window = 4
+    result = rolling_permutation_entropy(series, window=window)
+
+    expected = pd.Series([np.nan] * len(series))
+    for i in range(window - 1, len(series)):
+        expected.iloc[i] = permutation_entropy(
+            series.iloc[i - window + 1 : i + 1]
+        )
+
+    pd.testing.assert_series_equal(result, expected)

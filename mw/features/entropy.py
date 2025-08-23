@@ -58,15 +58,27 @@ def permutation_entropy(series: pd.Series, m: int = 3, tau: int = 1) -> float:
 def rolling_permutation_entropy(
     series: pd.Series, window: int, m: int = 3, tau: int = 1
 ) -> pd.Series:
-    """Causal rolling PE; aligns result to window end."""
+    """Return permutation entropy over sliding windows.
 
-    def _pe(x: np.ndarray) -> float:
-        return permutation_entropy(pd.Series(x), m=m, tau=tau)
+    The result is *causal* and aligned to the window end, i.e. the value at
+    ``series.index[i]`` uses the data from ``series[i - window + 1 : i + 1]``.
+    Positions that do not have a full window of observations are filled with
+    ``NaN`` so that the returned :class:`~pandas.Series` always matches the
+    length and index of ``series``.
+    """
 
-    return series.rolling(window, min_periods=window).apply(
-        _pe,
-        raw=True,
-    )
+    values = np.full(len(series), np.nan, dtype=float)
+    if window <= 0:
+        raise ValueError("window must be positive")
+
+    for i in range(window - 1, len(series)):
+        window_slice = series.iloc[i - window + 1 : i + 1]
+        # Require a full window of observations; mimic pandas' ``min_periods``.
+        if window_slice.isna().any():
+            continue
+        values[i] = permutation_entropy(window_slice, m=m, tau=tau)
+
+    return pd.Series(values, index=series.index)
 
 
 def sample_entropy(series: pd.Series, m: int = 2, r: float = 0.2) -> float:
