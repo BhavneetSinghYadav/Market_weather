@@ -13,7 +13,7 @@ default to a small stagger between steps.
 import logging
 import time
 from datetime import timedelta
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from mw.utils.time import floor_to_minute, now_utc
 
@@ -25,6 +25,7 @@ def run_minute_loop(
     plot_fn: Callable,
     health_fn: Callable,
     params: Dict[str, Any],
+    error_fn: Optional[Callable[[str, Exception], None]] = None,
 ) -> None:
     """High-level loop; call every minute (t+3s).
 
@@ -37,6 +38,8 @@ def run_minute_loop(
         "minute_loop_offsets",
         {"poll": 3, "compute": 5, "persist": 6, "plot": 7, "health": 8},
     )
+
+    critical_steps = set(params.get("minute_loop_critical_steps", []))
 
     minute_start = floor_to_minute(now_utc())
 
@@ -54,5 +57,9 @@ def run_minute_loop(
         time.sleep(max(0.0, sleep_for))
         try:
             fn()
-        except Exception:
+        except Exception as exc:
             logging.exception("Exception in %s step", name)
+            if error_fn is not None:
+                error_fn(name, exc)
+            if name in critical_steps:
+                break

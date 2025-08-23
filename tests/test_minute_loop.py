@@ -82,3 +82,67 @@ def test_run_minute_loop_continues_after_failure(monkeypatch):
     run_minute_loop(poll, compute, persist, plot, health, params)
 
     assert call_order == ["compute", "persist", "plot", "health"]
+
+
+def test_run_minute_loop_calls_error_fn(monkeypatch):
+    errors = []
+
+    def poll():
+        raise RuntimeError("boom")
+
+    def compute():
+        pass
+
+    def persist():
+        pass
+
+    def plot():
+        pass
+
+    def health():
+        pass
+
+    def error_fn(step, exc):
+        errors.append((step, exc))
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
+
+    params = {"minute_loop_offsets": {}}
+
+    run_minute_loop(poll, compute, persist, plot, health, params, error_fn)
+
+    assert errors and errors[0][0] == "poll"
+    assert isinstance(errors[0][1], RuntimeError)
+
+
+def test_run_minute_loop_skips_remaining_on_critical_failure(monkeypatch):
+    call_order = []
+
+    def poll():
+        raise RuntimeError("boom")
+
+    def compute():
+        call_order.append("compute")
+
+    def persist():
+        call_order.append("persist")
+
+    def plot():
+        call_order.append("plot")
+
+    def health():
+        call_order.append("health")
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr("mw.live.minute_loop.now_utc", lambda: start)
+
+    params = {"minute_loop_offsets": {}, "minute_loop_critical_steps": ["poll"]}
+
+    run_minute_loop(poll, compute, persist, plot, health, params)
+
+    assert call_order == []
