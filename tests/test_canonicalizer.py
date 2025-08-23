@@ -49,7 +49,13 @@ def test_canonicalize_end_to_end(tmp_path):
             "low": [9.0, 10.1, float("nan"), 10.5],
             "close": [10.5, 11.1, float("nan"), 11.5],
             "is_gap": [False, False, True, False],
+            "minute_of_day": [870, 871, 872, 873],
+            "is_session": [True, True, True, True],
+            "quality_score": [1.0, 1.0, 1.0, 1.0],
         }
+    )
+    expected["minute_of_day"] = expected["minute_of_day"].astype(
+        result["minute_of_day"].dtype
     )
 
     pd.testing.assert_frame_equal(result, expected)
@@ -96,6 +102,9 @@ def test_canonicalize_empty(tmp_path):
         "low",
         "close",
         "is_gap",
+        "minute_of_day",
+        "is_session",
+        "quality_score",
     ]
     assert result.index.name == "timestamp"
 
@@ -106,3 +115,39 @@ def test_canonicalize_empty(tmp_path):
     assert meta["rows"] == 0
     assert meta["duplicates"] == 0
     assert meta["gaps"] == 0
+
+
+def test_is_session_weekend(tmp_path):
+    raw = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-06 09:30"],  # Saturday
+            "open": [1.0],
+            "high": [1.1],
+            "low": [0.9],
+            "close": [1.05],
+        }
+    )
+    out = tmp_path / "weekend.parquet"
+    canonicalize(raw, out.as_posix())
+
+    result = pd.read_parquet(out)
+    result["timestamp"] = pd.to_datetime(result["timestamp"], utc=True)
+
+    expected = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2024-01-06 14:30", tz="UTC")],
+            "open": [1.0],
+            "high": [1.1],
+            "low": [0.9],
+            "close": [1.05],
+            "is_gap": [False],
+            "minute_of_day": [870],
+            "is_session": [False],
+            "quality_score": [1.0],
+        }
+    )
+    expected["minute_of_day"] = expected["minute_of_day"].astype(
+        result["minute_of_day"].dtype
+    )
+
+    pd.testing.assert_frame_equal(result, expected)
