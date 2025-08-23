@@ -1,14 +1,15 @@
 import pandas as pd
-import requests
 import pytest
+import requests
 
-from mw.adapters import polygon_quotes
+from mw.adapters import polygon_quotes, polygon_rest
 
 
 class DummyResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload, status_code=200, headers=None):
         self.payload = payload
         self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
         if self.status_code != 200:
@@ -19,8 +20,9 @@ class DummyResponse:
 
 
 class FailingResponse:
-    def __init__(self, status_code):
+    def __init__(self, status_code, headers=None):
         self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
         raise requests.HTTPError(str(self.status_code))
@@ -32,8 +34,18 @@ class FailingResponse:
 def test_fetch_quotes_paginates(monkeypatch):
     payload1 = {
         "results": [
-            {"sip_timestamp": 0, "bid_price": 1.0, "ask_price": 2.0, "participant_exchange": "V"},
-            {"sip_timestamp": 1, "bid_price": 1.1, "ask_price": 2.1, "participant_exchange": "V"},
+            {
+                "sip_timestamp": 0,
+                "bid_price": 1.0,
+                "ask_price": 2.0,
+                "participant_exchange": "V",
+            },
+            {
+                "sip_timestamp": 1,
+                "bid_price": 1.1,
+                "ask_price": 2.1,
+                "participant_exchange": "V",
+            },
         ],
         "next_url": "https://api.polygon.io/v3/quotes/XYZ?cursor=abc",
     }
@@ -57,7 +69,8 @@ def test_fetch_quotes_paginates(monkeypatch):
 
     assert calls[0][0] == "https://api.polygon.io/v3/quotes/XYZ"
     assert calls[0][1]["apiKey"] == "KEY"
-    assert calls[1][0] == "https://api.polygon.io/v3/quotes/XYZ?cursor=abc&apiKey=KEY"
+    expected_url = "https://api.polygon.io/v3/quotes/XYZ?cursor=abc&apiKey=KEY"
+    assert calls[1][0] == expected_url
     assert calls[1][1] is None
 
     expected_ts = pd.to_datetime([0, 1, 2, 3], unit="ns", utc=True)
@@ -70,8 +83,19 @@ def test_fetch_quotes_paginates(monkeypatch):
 
 
 def test_fetch_quotes_retries_on_429(monkeypatch):
-    payload = {"results": [{"sip_timestamp": 0, "bid_price": 1.0, "ask_price": 2.0}]}
-    responses = [FailingResponse(429), DummyResponse(payload)]
+    payload = {
+        "results": [
+            {
+                "sip_timestamp": 0,
+                "bid_price": 1.0,
+                "ask_price": 2.0,
+            },
+        ]
+    }
+    responses = [
+        FailingResponse(429, headers={"Retry-After": "4"}),
+        DummyResponse(payload),
+    ]
     calls = {"n": 0}
 
     def fake_get(url, params=None, timeout=10):
@@ -81,11 +105,13 @@ def test_fetch_quotes_retries_on_429(monkeypatch):
 
     monkeypatch.setenv("POLYGON_API_KEY", "KEY")
     monkeypatch.setattr(requests, "get", fake_get)
-    monkeypatch.setattr(polygon_quotes.time, "sleep", lambda s: None)
+    sleeps: list[float] = []
+    monkeypatch.setattr(polygon_rest.time, "sleep", lambda s: sleeps.append(s))
 
     df = polygon_quotes.fetch_quotes("XYZ", 0, 0)
 
     assert calls["n"] == 2
+    assert sleeps == [4.0]
     expected_ts = pd.to_datetime([0], unit="ns", utc=True)
     assert df["ts_utc"].tolist() == list(expected_ts)
     assert df["bid"].tolist() == [1.0]

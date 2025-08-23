@@ -9,6 +9,7 @@ class DummyResponse:
     def __init__(self, payload):
         self.payload = payload
         self.status_code = 200
+        self.headers = {}
 
     def raise_for_status(self):
         pass
@@ -18,8 +19,16 @@ class DummyResponse:
 
 
 class FailingResponse:
-    def __init__(self, message: str = "boom"):
+    def __init__(
+        self,
+        message: str = "boom",
+        *,
+        status_code: int = 500,
+        headers: dict | None = None,
+    ):
         self.message = message
+        self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self):
         raise requests.HTTPError(self.message)
@@ -127,6 +136,45 @@ def test_fetch_fx_agg_minute_retries_then_succeeds(monkeypatch):
     df = polygon_rest.fetch_fx_agg_minute("EURUSD", "2020-01-01", "2020-01-01")
 
     assert calls["n"] == 2
+    expected = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime([0], unit="ms", utc=True),
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+            "volume": [1],
+        }
+    )
+    pd.testing.assert_frame_equal(df, expected)
+
+
+def test_fetch_fx_agg_minute_respects_retry_after(monkeypatch):
+    payload = {
+        "results": [
+            {"t": 0, "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": 1},
+        ]
+    }
+    responses = [
+        FailingResponse(status_code=429, headers={"Retry-After": "7"}),
+        DummyResponse(payload),
+    ]
+    calls = {"n": 0}
+
+    def fake_get(url, params, timeout):
+        resp = responses[calls["n"]]
+        calls["n"] += 1
+        return resp
+
+    monkeypatch.setenv("POLYGON_API_KEY", "KEY")
+    monkeypatch.setattr(requests, "get", fake_get)
+    sleeps: list[float] = []
+    monkeypatch.setattr(polygon_rest.time, "sleep", lambda s: sleeps.append(s))
+
+    df = polygon_rest.fetch_fx_agg_minute("EURUSD", "2020-01-01", "2020-01-01")
+
+    assert calls["n"] == 2
+    assert sleeps == [7.0]
     expected = pd.DataFrame(
         {
             "timestamp": pd.to_datetime([0], unit="ms", utc=True),
