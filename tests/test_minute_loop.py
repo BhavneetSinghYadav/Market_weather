@@ -363,6 +363,77 @@ def test_minute_loop_logs_gaps_and_filters_duplicates(monkeypatch, tmp_path):
     assert health["late_bar_count"] == 1
 
 
+def test_minute_loop_duplicate_then_gap(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    from mw.live import minute_loop as ml
+
+    ml._LAST_TS_SEEN = None
+    monkeypatch.setattr("time.sleep", lambda x: None)
+
+    ts = pd.date_range("2024-01-01", periods=3, freq="1min", tz="UTC")
+    df1 = pd.DataFrame({"timestamp": ts[:2], "v": [1, 2]})
+    df2 = pd.DataFrame({"timestamp": [ts[1], ts[2]], "v": [3, 4]})
+
+    data_iter = iter([df1, df2])
+
+    def poll():
+        return next(data_iter)
+
+    def dummy():
+        return None
+
+    params = Params()
+    params.minute_loop.offsets = {}
+
+    logger = SessionLogger(Path("decisions.csv"), Path("summary.json"))
+
+    for _ in range(2):
+        run_minute_loop(
+            poll,
+            dummy,
+            dummy,
+            dummy,
+            dummy,
+            dummy,
+            params,
+            session_logger=logger,
+        )
+
+    path = Path("data") / "minute_bars.parquet"
+    df = pd.read_parquet(path)
+    assert list(df["timestamp"]) == [ts[0], ts[1], ts[2]]
+    assert logger.duplicate_count == 0
+    assert logger.gap_count == 0
+
+    df_gap = pd.DataFrame(
+        {"timestamp": [ts[2] + pd.Timedelta(minutes=2)], "v": [5]}
+    )
+    data_iter_gap = iter([df_gap])
+
+    def poll_gap():
+        return next(data_iter_gap)
+
+    run_minute_loop(
+        poll_gap,
+        dummy,
+        dummy,
+        dummy,
+        dummy,
+        dummy,
+        params,
+        session_logger=logger,
+    )
+
+    df = pd.read_parquet(path)
+    assert list(df["timestamp"]) == [
+        ts[0],
+        ts[1],
+        ts[2],
+        ts[2] + pd.Timedelta(minutes=2),
+    ]
+    assert logger.gap_count == 1
+
+
 def test_run_minute_loop_advances_without_logger(monkeypatch):
     from mw.live import minute_loop as ml
 
