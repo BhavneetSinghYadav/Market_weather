@@ -1,10 +1,14 @@
+# isort: skip_file
 import sys
 from pathlib import Path
 
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from mw.scoring.tradability import score_tradability
+from mw.scoring.tradability import (  # noqa: E402
+    score_tradability,
+    state_machine,
+)
 
 
 def test_score_tradability_default_weights_align_and_clip():
@@ -24,5 +28,27 @@ def test_score_tradability_custom_weights_and_clip():
     expected = pd.Series([1.0, 0.0])
 
     result = score_tradability(e_hat, l_hat, weights)
+
+    pd.testing.assert_series_equal(result, expected)
+
+
+def test_state_machine_hysteresis_and_spacing():
+    scores = pd.Series([0.5, 0.7, 0.7, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7])
+    expected = pd.Series(
+        [
+            "YELLOW",
+            "YELLOW",
+            "GREEN",
+            "GREEN",
+            "GREEN",
+            "RED",
+            "RED",
+            "RED",
+            "GREEN",
+        ],
+        index=scores.index,
+    )
+
+    result = state_machine(scores)
 
     pd.testing.assert_series_equal(result, expected)
