@@ -17,6 +17,9 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 
+_rng = np.random.default_rng()
+
+
 def _ordinal_patterns(
     values: np.ndarray,
     m: int,
@@ -30,7 +33,13 @@ def _ordinal_patterns(
     patterns: List[Tuple[int, ...]] = []
     for i in range(n - (m - 1) * tau):
         window = values[i : i + (m - 1) * tau + 1 : tau]  # noqa: E203
-        inner = np.argsort(window, kind="mergesort")
+        if np.unique(window).size == 1:
+            inner = np.argsort(window, kind="mergesort")
+        else:
+            if np.unique(window).size < window.size:
+                jitter = _rng.uniform(-1e-10, 1e-10, size=window.size)
+                window = window + jitter
+            inner = np.argsort(window, kind="mergesort")
         ranks = np.argsort(inner, kind="mergesort")
         patterns.append(tuple(ranks))
     return patterns

@@ -55,3 +55,14 @@ def test_sample_entropy_random_greater_than_deterministic():
     h_rand = sample_entropy(random_series, m=2, r=0.2)
     h_det = sample_entropy(deterministic, m=2, r=0.2)
     assert h_rand > h_det
+
+
+def test_permutation_entropy_with_repeated_values():
+    import mw.features.entropy as entropy
+
+    entropy._rng = np.random.default_rng(0)
+    series = pd.Series([1, 1, 2, 2, 3, 3] * 5)
+    h1 = permutation_entropy(series, m=3, tau=1)
+    entropy._rng = np.random.default_rng(0)
+    h2 = permutation_entropy(series, m=3, tau=1)
+    assert h1 == h2 and h1 > 0
