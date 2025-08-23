@@ -1,4 +1,5 @@
 import sys
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -304,7 +305,10 @@ def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path)
     ts = pd.date_range("2024-01-01", periods=2, freq="1min", tz="UTC")
     df1 = pd.DataFrame({"timestamp": ts, "v": [1, 2]})
     df2 = pd.DataFrame(
-        {"timestamp": [ts[1], ts[1] + pd.Timedelta(minutes=1)], "v": [3, 4]}
+        {
+            "timestamp": [ts[1], ts[1], ts[1] + pd.Timedelta(minutes=1)],
+            "v": [3, 3, 4],
+        }
     )
     df3 = pd.DataFrame({"timestamp": [ts[1] + pd.Timedelta(minutes=3)], "v": [5]})
     data_iter = iter([df1, df2, df3])
@@ -331,6 +335,8 @@ def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path)
             session_logger=logger,
         )
 
+    logger.close()
+
     path = Path("data") / "minute_bars.parquet"
     df = pd.read_parquet(path)
     assert list(df["timestamp"]) == [
@@ -340,3 +346,11 @@ def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path)
         ts[1] + pd.Timedelta(minutes=3),
     ]
     assert logger.gap_count == 1
+    assert logger.duplicate_count == 1
+    assert logger.late_bar_count == 1
+    summary = json.loads(Path("summary.json").read_text())
+    health = summary["health"]
+    assert health["seen_bars"] == 4
+    assert health["gap_count"] == 1
+    assert health["duplicate_count"] == 1
+    assert health["late_bar_count"] == 1
