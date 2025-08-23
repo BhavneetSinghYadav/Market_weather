@@ -28,16 +28,16 @@ import pytz
 from mw.utils.ohlc_checks import validate_ohlc
 from mw.utils.persistence import write_json, write_parquet
 
-
 ET_TZ = pytz.timezone("America/New_York")
 
 
 def _hash_df(df: pd.DataFrame) -> str:
     """Return a deterministic SHA256 hash for ``df``.
 
-    The dataframe is hashed row wise using :func:`pandas.util.hash_pandas_object`
-    which provides a stable 64bit hash for each row.  The bytes of these hashes
-    are then digested with SHA256 to obtain the final hexadecimal string.
+    The dataframe is hashed row wise using
+    :func:`pandas.util.hash_pandas_object` which provides a stable 64bit hash
+    for each row. The bytes of these hashes are then digested with SHA256 to
+    obtain the final hexadecimal string.
     """
 
     row_hashes = pd.util.hash_pandas_object(df, index=True).values.tobytes()
@@ -66,10 +66,29 @@ def canonicalize(
     -------
     pd.DataFrame
         The canonicalised dataframe with a UTC ``timestamp`` index and an
-        ``is_gap`` column indicating missing minutes.
+        ``is_gap`` column indicating missing minutes.  If ``df`` is empty an
+        empty canonicalised dataframe is returned and metadata files are still
+        written with zero counts.
     """
-
     working = df.copy()
+    ohlc_cols = ["open", "high", "low", "close"]
+
+    if working.empty:
+        # Persist empty outputs early and return
+        working = pd.DataFrame(columns=ohlc_cols + ["is_gap"]).set_index(
+            pd.DatetimeIndex([], name="timestamp", tz="UTC")
+        )
+        metadata: Dict[str, Any] = {
+            "rows": 0,
+            "duplicates": 0,
+            "gaps": 0,
+            "contract_version": contract_version,
+        }
+        metadata["hash"] = _hash_df(working)
+        out_df = working.reset_index().rename(columns={"index": "timestamp"})
+        write_parquet(out_df, parquet_path)
+        write_json(metadata, f"{parquet_path}.meta.json")
+        return working
 
     # ------------------------------------------------------------------
     # Timestamp normalisation
@@ -88,7 +107,6 @@ def canonicalize(
 
     # ------------------------------------------------------------------
     # OHLC integrity checks
-    ohlc_cols = ["open", "high", "low", "close"]
     valid_mask = validate_ohlc(working[ohlc_cols])
     if not bool(valid_mask.all()):
         raise ValueError("Invalid OHLC row detected")
@@ -127,4 +145,3 @@ def canonicalize(
 
 
 __all__ = ["canonicalize"]
-

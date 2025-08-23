@@ -36,7 +36,10 @@ def test_canonicalize_end_to_end(tmp_path):
     result["timestamp"] = pd.to_datetime(result["timestamp"], utc=True)
 
     expected_index = pd.date_range(
-        "2024-01-01 14:30", periods=4, freq="1min", tz="UTC"
+        "2024-01-01 14:30",
+        periods=4,
+        freq="1min",
+        tz="UTC",
     )
     expected = pd.DataFrame(
         {
@@ -80,3 +83,26 @@ def test_canonicalize_invalid_ohlc(tmp_path):
     assert not out.exists()
     assert not Path(str(out) + ".meta.json").exists()
 
+
+def test_canonicalize_empty(tmp_path):
+    raw = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close"])
+    out = tmp_path / "empty.parquet"
+    result = canonicalize(raw, out.as_posix())
+
+    assert result.empty
+    assert list(result.columns) == [
+        "open",
+        "high",
+        "low",
+        "close",
+        "is_gap",
+    ]
+    assert result.index.name == "timestamp"
+
+    meta_path = Path(str(out) + ".meta.json")
+    with meta_path.open() as f:
+        meta = json.load(f)
+
+    assert meta["rows"] == 0
+    assert meta["duplicates"] == 0
+    assert meta["gaps"] == 0
