@@ -191,6 +191,25 @@ def test_canonicalize_empty(tmp_path):
     assert meta["clip_count"] == 0
 
 
+def test_et_to_utc_round_trip(tmp_path):
+    ts_et = pd.date_range("2024-03-11 09:30", periods=3, freq="1min", tz="America/New_York")
+    df = pd.DataFrame(
+        {
+            "timestamp": ts_et.tz_localize(None),
+            "open": [1.0, 1.1, 1.2],
+            "high": [1.0, 1.1, 1.2],
+            "low": [1.0, 1.1, 1.2],
+            "close": [1.0, 1.1, 1.2],
+        }
+    )
+    out = tmp_path / "tz.parquet"
+    canon = canonicalize(df, out.as_posix(), source="unit_test")
+
+    round_tripped = canon.index.tz_convert("America/New_York")
+    assert list(round_tripped) == list(ts_et)
+    assert canon.index[0].minute == 30
+
+
 def test_is_session_weekend(tmp_path):
     raw = pd.DataFrame(
         {
