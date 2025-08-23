@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import random
 import time
 from datetime import timedelta
 from typing import Iterator
@@ -11,6 +12,17 @@ import pandas as pd
 import requests
 
 BASE_URL = "https://api.polygon.io"
+
+_SESSION: requests.Session | None = None
+_REQUESTS_GET = requests.get
+
+
+def _get_session() -> requests.Session:
+    """Return a global ``requests.Session`` instance."""
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+    return _SESSION
 
 
 def _get_api_key() -> str:
@@ -51,10 +63,12 @@ def fetch_fx_agg_minute(
         "limit": limit,
         "apiKey": api_key,
     }
+    session = _get_session()
+    get_call = session.get if requests.get is _REQUESTS_GET else requests.get
     resp = None
     for attempt in range(3):
         try:
-            resp = requests.get(url, params=params, timeout=10)
+            resp = get_call(url, params=params, timeout=10)
             resp.raise_for_status()
             break
         except requests.RequestException as exc:
@@ -62,8 +76,12 @@ def fetch_fx_agg_minute(
                 raise RuntimeError(
                     f"Polygon API request failed after 3 attempts: {exc}"
                 ) from exc
-            time.sleep(2**attempt)
-    data = resp.json()
+            sleep_time = (2**attempt) + random.uniform(0, 1)
+            time.sleep(sleep_time)
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise RuntimeError("Polygon API returned invalid JSON") from exc
     results = data.get("results", [])
     if not results:
         return pd.DataFrame(
