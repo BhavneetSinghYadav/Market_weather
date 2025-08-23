@@ -19,16 +19,10 @@ from typing import Any, Callable, Optional, Union
 import pandas as pd
 
 from mw.live.health import evaluate_freshness
-from mw.live.logger import (
-    DuplicateDrop,
-    GapEvent,
-    LateBar,
-    SessionLogger,
-)
+from mw.live.logger import DuplicateDrop, GapEvent, LateBar, SessionLogger
 from mw.utils.params import MinuteLoopParams, Params
 from mw.utils.persistence import write_parquet
 from mw.utils.time import floor_to_minute, now_utc
-
 
 _LAST_TS_SEEN: Optional[datetime] = None
 _BARS_PATH = Path("data") / "minute_bars.parquet"
@@ -43,9 +37,16 @@ def _append_polled_bars(
 
     global _LAST_TS_SEEN
     if new is None or new.empty:
-        if _LAST_TS_SEEN is not None and logger is not None:
+        if _LAST_TS_SEEN is not None:
             missing = _LAST_TS_SEEN + timedelta(minutes=1)
-            logger.log_gap(GapEvent(missing, symbol, "no bar returned by /v2 aggs"))
+            if logger is not None:
+                logger.log_gap(
+                    GapEvent(
+                        missing,
+                        symbol,
+                        "no bar returned by /v2 aggs",
+                    )
+                )
             _LAST_TS_SEEN = missing
         return
 
@@ -64,14 +65,22 @@ def _append_polled_bars(
         if new.empty:
             missing = _LAST_TS_SEEN + timedelta(minutes=1)
             if logger is not None:
-                logger.log_gap(GapEvent(missing, symbol, "no bar returned by /v2 aggs"))
+                logger.log_gap(
+                    GapEvent(
+                        missing,
+                        symbol,
+                        "no bar returned by /v2 aggs",
+                    )
+                )
             _LAST_TS_SEEN = missing
             return
         first_ts = new["timestamp"].iloc[0]
         expected = _LAST_TS_SEEN + timedelta(minutes=1)
         while expected < first_ts:
             if logger is not None:
-                logger.log_gap(GapEvent(expected, symbol, "no bar returned by /v2 aggs"))
+                logger.log_gap(
+                    GapEvent(expected, symbol, "no bar returned by /v2 aggs")
+                )
             _LAST_TS_SEEN = expected
             expected += timedelta(minutes=1)
 

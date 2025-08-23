@@ -1,15 +1,15 @@
-import sys
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import pandas as pd
+import pandas as pd  # noqa: E402
 
+from mw.live.logger import SessionLogger  # noqa: E402
 from mw.live.minute_loop import run_minute_loop  # noqa: E402
 from mw.utils.params import Params  # noqa: E402
-from mw.live.logger import SessionLogger  # noqa: E402
 
 
 def test_run_minute_loop_calls_functions_in_order(monkeypatch):
@@ -295,9 +295,10 @@ def test_run_minute_loop_runs_all_when_fresh(monkeypatch):
     assert "stale" not in call_order
 
 
-def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path):
+def test_minute_loop_logs_gaps_and_filters_duplicates(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     from mw.live import minute_loop as ml
+
     ml._LAST_TS_SEEN = None
 
     monkeypatch.setattr("time.sleep", lambda x: None)
@@ -310,13 +311,19 @@ def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path)
             "v": [3, 3, 4],
         }
     )
-    df3 = pd.DataFrame({"timestamp": [ts[1] + pd.Timedelta(minutes=3)], "v": [5]})
+    df3 = pd.DataFrame(
+        {
+            "timestamp": [ts[1] + pd.Timedelta(minutes=3)],
+            "v": [5],
+        }
+    )
     data_iter = iter([df1, df2, df3])
 
     def poll():
         return next(data_iter)
 
-    dummy = lambda: None
+    def dummy():
+        return None
 
     params = Params()
     params.minute_loop.offsets = {}
@@ -354,3 +361,26 @@ def test_run_minute_loop_filters_duplicates_and_logs_gaps(monkeypatch, tmp_path)
     assert health["gap_count"] == 1
     assert health["duplicate_count"] == 1
     assert health["late_bar_count"] == 1
+
+
+def test_run_minute_loop_advances_without_logger(monkeypatch):
+    from mw.live import minute_loop as ml
+
+    monkeypatch.setattr("time.sleep", lambda x: None)
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(ml, "now_utc", lambda: start)
+
+    ml._LAST_TS_SEEN = start
+
+    def poll():
+        return pd.DataFrame()
+
+    def dummy():
+        return None
+
+    params = Params()
+    params.minute_loop.offsets = {}
+
+    ml.run_minute_loop(poll, dummy, dummy, dummy, dummy, dummy, params)
+
+    assert ml._LAST_TS_SEEN == start + timedelta(minutes=1)
