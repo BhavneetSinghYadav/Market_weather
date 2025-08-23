@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 import requests
 
 from mw.adapters import polygon_rest
@@ -14,6 +15,17 @@ class DummyResponse:
 
     def json(self):
         return self.payload
+
+
+class FailingResponse:
+    def __init__(self, message: str = "boom"):
+        self.message = message
+
+    def raise_for_status(self):
+        raise requests.HTTPError(self.message)
+
+    def json(self):
+        return {}
 
 
 def test_fetch_fx_agg_minute(monkeypatch):
@@ -92,3 +104,54 @@ def test_backfill_fx_agg_minute(monkeypatch):
             "close",
             "volume",
         ]
+
+
+def test_fetch_fx_agg_minute_retries_then_succeeds(monkeypatch):
+    payload = {
+        "results": [
+            {"t": 0, "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0, "v": 1},
+        ]
+    }
+    responses = [FailingResponse(), DummyResponse(payload)]
+    calls = {"n": 0}
+
+    def fake_get(url, params, timeout):
+        resp = responses[calls["n"]]
+        calls["n"] += 1
+        return resp
+
+    monkeypatch.setenv("POLYGON_API_KEY", "KEY")
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(polygon_rest.time, "sleep", lambda s: None)
+
+    df = polygon_rest.fetch_fx_agg_minute("EURUSD", "2020-01-01", "2020-01-01")
+
+    assert calls["n"] == 2
+    expected = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime([0], unit="ms", utc=True),
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+            "volume": [1],
+        }
+    )
+    pd.testing.assert_frame_equal(df, expected)
+
+
+def test_fetch_fx_agg_minute_retries_and_fails(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_get(url, params, timeout):
+        calls["n"] += 1
+        return FailingResponse("fail")
+
+    monkeypatch.setenv("POLYGON_API_KEY", "KEY")
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr(polygon_rest.time, "sleep", lambda s: None)
+
+    with pytest.raises(RuntimeError, match="fail"):
+        polygon_rest.fetch_fx_agg_minute("EURUSD", "2020-01-01", "2020-01-01")
+
+    assert calls["n"] == 3
