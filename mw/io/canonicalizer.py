@@ -85,27 +85,30 @@ def canonicalize(
     working = df.copy()
     ohlc_cols = ["open", "high", "low", "close"]
 
-    if working.empty:
-        # Persist empty outputs early and return
-        working = pd.DataFrame(
+    def _persist_empty_result(clip_count: int, duplicates: int = 0) -> pd.DataFrame:
+        empty = pd.DataFrame(
             columns=ohlc_cols
             + ["is_gap", "minute_of_day", "is_session", "quality_score"]
         ).set_index(pd.DatetimeIndex([], name="timestamp", tz="UTC"))
         metadata: Dict[str, Any] = {
             "rows": 0,
-            "duplicates": 0,
+            "duplicates": duplicates,
             "gaps": 0,
             "contract_version": contract_version,
             "source": source,
             "tz_of_source": tz_of_source,
             "loaded_at": pd.Timestamp.utcnow().isoformat(),
-            "clip_count": 0,
+            "clip_count": clip_count,
         }
-        metadata["hash"] = _hash_df(working)
-        out_df = working.reset_index().rename(columns={"index": "timestamp"})
+        metadata["hash"] = _hash_df(empty)
+        out_df = empty.reset_index().rename(columns={"index": "timestamp"})
         write_parquet(out_df, parquet_path)
         write_json(metadata, f"{parquet_path}.meta.json")
-        return working
+        return empty
+
+    if working.empty:
+        # Persist empty outputs early and return
+        return _persist_empty_result(clip_count=0)
 
     # ------------------------------------------------------------------
     # Timestamp normalisation
@@ -124,9 +127,19 @@ def canonicalize(
 
     # ------------------------------------------------------------------
     # OHLC integrity checks
-    valid_mask = validate_ohlc(working[ohlc_cols])
-    if not bool(valid_mask.all()):
-        raise ValueError("Invalid OHLC row detected")
+    valid_mask, clipped = validate_ohlc(working[ohlc_cols], return_clipped=True)
+    invalid_mask = ~valid_mask
+    clip_count = int(invalid_mask.sum())
+    if clip_count:
+        working.loc[invalid_mask, ohlc_cols] = clipped.loc[invalid_mask]
+        final_mask = validate_ohlc(working[ohlc_cols])
+        if not bool(final_mask.all()):
+            working = working[final_mask]
+    else:
+        clip_count = 0
+
+    if working.empty:
+        return _persist_empty_result(clip_count, duplicate_count)
 
     # ------------------------------------------------------------------
     # Enforce strict one-minute grid and mark gaps
@@ -156,7 +169,7 @@ def canonicalize(
         "source": source,
         "tz_of_source": tz_of_source,
         "loaded_at": pd.Timestamp.utcnow().isoformat(),
-        "clip_count": 0,
+        "clip_count": clip_count,
     }
     metadata["hash"] = _hash_df(working)
 
